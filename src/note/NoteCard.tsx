@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -243,9 +243,11 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
   const body: ReactNode = hasKindBody(event.kind) ? (
     <KindBody event={event} focus={focus} blur={blur && !revealed} />
   ) : (
-    <div className={`mt-1 ${focus ? "text-[18px] leading-7" : "text-base leading-6"}`}>
-      <RichText event={event} blurMedia={blur && !revealed} />
-    </div>
+    <Clamp on={!focus && !preview}>
+      <div className={`mt-1 ${focus ? "text-[18px] leading-7" : "text-base leading-6"}`}>
+        <RichText event={event} blurMedia={blur && !revealed} />
+      </div>
+    </Clamp>
   );
 
   const card = (
@@ -302,6 +304,29 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
     <SwipeRow start={side(settings.swipeStart)} end={side(settings.swipeEnd)} onLongPress={() => openNoteMenu(event)}>
       {card}
     </SwipeRow>
+  );
+}
+
+/** Fold very long notes in feeds behind "Show more". */
+function Clamp({ on, children }: { on: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [tall, setTall] = useState(false);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    if (on && ref.current) setTall(ref.current.scrollHeight > 520);
+  }, [on, children]);
+  if (!on) return <>{children}</>;
+  return (
+    <>
+      <div ref={ref} className={tall && !open ? "max-h-[420px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_80%,transparent)]" : ""}>
+        {children}
+      </div>
+      {tall && !open && (
+        <button type="button" className="mt-1 text-[14px] font-medium text-accent-ink" onClick={(e) => (e.stopPropagation(), setOpen(true))}>
+          Show more
+        </button>
+      )}
+    </>
   );
 }
 

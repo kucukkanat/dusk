@@ -6,6 +6,19 @@ import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "./core";
 import { loadContactLists, outboxPlan, relaysPlan, type TimelineSpec } from "./timeline";
 import { ensureLatest } from "./actions";
 
+/** People to suggest to someone brand new: long-time Nostr builders and writers. */
+export const SUGGESTED = [
+  "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+  "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",
+  "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+  "97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322",
+  "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "3f770d65d3a764a9c5cb503ae123e62ec7598ad035d836e2a810f3877a745b24",
+  "6e468422dfb74a5738702a8823b9b28168abab8655faacb6853cd0ee15deee93",
+  "04c915daefee38317fa734444acee390a8269fe5810b2241e5e6dd343dfbecc9",
+];
+
+
 export const NOTE_KINDS = [1, 6, 16, 20, 1068];
 
 /** True for kind-1 notes that reply to something. */
@@ -45,7 +58,8 @@ export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
         key,
         accept: topLevel,
         plan: async () => {
-          if (!me) return relaysPlan(DEFAULT_RELAYS, { kinds: [1, 6] });
+          // guests see a hand-picked set of long-time Nostr people instead of the firehose
+          if (!me) return outboxPlan(SUGGESTED, { kinds: NOTE_KINDS });
           const follows = await myContacts(me);
           return outboxPlan([...follows, me], { kinds: NOTE_KINDS });
         },

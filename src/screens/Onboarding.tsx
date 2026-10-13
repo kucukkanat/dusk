@@ -11,6 +11,7 @@ import { LOOKUP_RELAYS, DEFAULT_RELAYS, uniqRelays } from "../nostr/core";
 import { Icon, type IconName } from "../ui/Icon";
 import { Avatar, Field, Warn } from "../ui/primitives";
 import { useProfile, nameOf } from "../nostr/profile";
+import { SUGGESTED } from "../nostr/feeds";
 
 type Step = "welcome" | "name" | "backup" | "follows" | "signin";
 const useOnb = create<{ open: boolean; step: Step; mode: "first" | "add" }>()(() => ({ open: false, step: "welcome", mode: "first" }));
@@ -33,17 +34,6 @@ export function useOnboarding() {
   return open;
 }
 
-/** People to suggest to someone brand new: long-time Nostr builders and writers. */
-const SUGGESTED = [
-  "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-  "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",
-  "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-  "97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322",
-  "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
-  "3f770d65d3a764a9c5cb503ae123e62ec7598ad035d836e2a810f3877a745b24",
-  "6e468422dfb74a5738702a8823b9b28168abab8655faacb6853cd0ee15deee93",
-  "04c915daefee38317fa734444acee390a8269fe5810b2241e5e6dd343dfbecc9",
-];
 
 function Shell({ children, step, total }: { children: React.ReactNode; step?: number; total?: number }) {
   const mode = useOnb((s) => s.mode);
