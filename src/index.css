@@ -95,14 +95,6 @@
   html, body, #root { height: 100%; }
   html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html, body { overscroll-behavior: none; }
-  /* iOS 26 home-screen apps can report a viewport shorter than the screen, leaving a gap under the
-     tab bar. There, size full-screen layers to the large viewport. -webkit-touch-callout limits this to iOS. */
-  @media (display-mode: standalone) {
-    @supports (-webkit-touch-callout: none) and (height: 100lvh) {
-      html, body { height: 100lvh; }
-      [data-fill] { bottom: auto; height: 100lvh; }
-    }
-  }
   /* keyboard open: full-screen layers follow the visible area so composers sit right on the keyboard */
   :root[data-kb] [data-fill] { top: var(--vv-top, 0px); bottom: auto; height: var(--vv-h, 100%); }
   :root[data-kb] .kb-hide { display: none; }
