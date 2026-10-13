@@ -74,16 +74,27 @@ function firstAccept(relays: string[], event: NostrEvent): Promise<PublishRespon
   });
 }
 
-/** Sign a template with the active account and send it to the right relays (outbox model). */
+/**
+ * Sign a template with the active account and send it to the right relays (outbox model).
+ * Resolves as soon as it is signed and on screen; sending carries on in the background and the
+ * sync pill shows (and retries) anything no relay accepted. Await `sent` to wait for a relay.
+ */
 export async function publish(template: Partial<EventTemplate> & { kind: number }, opts: PublishOptions = {}) {
   const t: EventTemplate = { content: "", tags: [], created_at: now(), ...template };
   const event = await signEvent(t);
-  if (!opts.silent) eventStore.add(event);
-  return sendEvent(event, opts);
+  if (opts.silent) return sendEvent(event, opts).then((r) => ({ ...r, sent: Promise.resolve(r) }));
+  eventStore.add(event);
+  return { event, sent: background(event, opts) };
 }
 
-/** Send an already-signed event (retry from the outbox, or gift wraps). */
-export const rebroadcast = (event: NostrEvent, opts?: PublishOptions) => sendEvent(event, opts);
+/** Send an already-signed event (retry from the outbox, or gift wraps). Silent sends are awaited: nothing else reports them. */
+export const rebroadcast = (event: NostrEvent, opts?: PublishOptions) => (opts?.silent ? sendEvent(event, opts) : background(event, opts));
+
+function background(event: NostrEvent, opts?: PublishOptions) {
+  const sent = sendEvent(event, opts);
+  sent.catch(() => {}); // failures land in the sync pill
+  return sent;
+}
 
 export function retryFailed() {
   for (const o of useOutbox.getState().items.filter((x) => x.state === "failed")) sendEvent(o.event, { only: o.relays }).catch(() => {});

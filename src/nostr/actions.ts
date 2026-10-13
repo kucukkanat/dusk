@@ -7,6 +7,11 @@ import { getSigner, getActivePubkey } from "../state/accounts";
 import { eventStore, pool, uniqRelays, writeRelays$, LOOKUP_RELAYS, DEFAULT_RELAYS } from "./core";
 import { rebroadcast } from "./publish";
 
+/** Pubkeys whose own lists the session has loaded and keeps live (see useSession). */
+const live = new Set<string>();
+export const markLive = (pubkey: string, on: boolean) => (on ? live.add(pubkey) : live.delete(pubkey));
+const isLive = (pubkey: string) => live.has(pubkey);
+
 /** A signer that resolves the active account's signer on demand (unlock or reconnect when needed). */
 export const activeSigner: EventSigner = {
   getPublicKey: async () => {
@@ -43,7 +48,7 @@ export const activeSigner: EventSigner = {
 
 const runner = new ActionRunner(eventStore, activeSigner, async (event: NostrEvent, relays?: string[]) => {
   const silent = event.kind === 1059;
-  await rebroadcast(event, relays?.length ? { only: uniqRelays(relays, silent ? [] : writeRelays$.value) } : { silent });
+  await rebroadcast(event, relays?.length ? { only: uniqRelays(relays, silent ? [] : writeRelays$.value), silent } : { silent });
 });
 
 export function runAction<Args extends unknown[]>(builder: ActionBuilder<Args>, ...args: Args) {
@@ -58,6 +63,8 @@ export async function ensureLatest(kind: number, pubkey = getActivePubkey(), ide
   if (!pubkey) throw new Error("Sign in first");
   const relays = uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS);
   const have = eventStore.getReplaceable(kind, pubkey, identifier);
+  // the session has fetched this and is listening for changes made elsewhere; no need to ask again
+  if (have && isLive(pubkey)) return have;
   const filter = identifier != null ? { kinds: [kind], authors: [pubkey], "#d": [identifier] } : { kinds: [kind], authors: [pubkey] };
   // the session keeps this live already; a short check is enough, and settle soon after the first relay answers
   await new Promise<void>((resolve) => {

@@ -847,7 +847,7 @@ function Vanish() {
           setBusy(true);
           try {
             const tags = scope === "all" ? [["relay", "ALL_RELAYS"]] : relays.map((r) => ["relay", r.url]);
-            await publish({ kind: 62, content: reason, tags }, { relays: relays.map((r) => r.url), notifyTagged: false });
+            await (await publish({ kind: 62, content: reason, tags }, { relays: relays.map((r) => r.url), notifyTagged: false })).sent;
             toast("Request sent");
           } catch (e) {
             errorToast(e, "Couldn't send");
