@@ -25,7 +25,7 @@ import { Icon } from "../ui/Icon";
 import { NoteCard, SWIPE_ACTIONS } from "../note/NoteCard";
 import { openEditProfile } from "../sheets/EditProfile";
 import { openShortcuts } from "./Shortcuts";
-import { openOnboarding } from "./Onboarding";
+import { openOnboarding } from "../state/onboarding";
 import { SOURCES, openFeedAdd } from "./Home";
 
 const TITLES: Record<string, string> = {

@@ -7,7 +7,7 @@ import { eventStore } from "../nostr/core";
 import { hintFor } from "../nostr/relays";
 import { toast, errorToast } from "../state/ui";
 import { getActivePubkey } from "../state/accounts";
-import { openOnboarding } from "../screens/Onboarding";
+import { openOnboarding } from "../state/onboarding";
 
 export function requireSignIn(): boolean {
   if (getActivePubkey()) return true;

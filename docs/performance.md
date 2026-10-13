@@ -82,3 +82,10 @@ These caught us out. Check them before assuming a request is bounded.
 - Only cache what makes the next start fast: your own lists, profiles, relay lists, notes. Not other
   people's follow lists or the reaction firehose.
 - Decrypting DMs happens in small batches that yield to the browser, after first paint.
+
+## Checking a change
+
+Public relays aren't always reachable from CI or a sandbox. Build against a local relay with
+`VITE_RELAYS=ws://localhost:7777 bun run build && bunx vite preview`, seed it with signed events (some
+replies, several authors), and check: time to first note, that scrolling pages all the way down without
+repeats, that the DOM holds only a window of notes, and that posting and following update instantly.

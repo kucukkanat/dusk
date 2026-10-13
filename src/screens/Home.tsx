@@ -10,7 +10,7 @@ import { Screen, Chips } from "../ui/Screen";
 import { NoteList } from "../note/NoteCard";
 import { Empty, Endcap, Field, FeedSkeleton } from "../ui/primitives";
 import { Icon } from "../ui/Icon";
-import { openOnboarding } from "./Onboarding";
+import { openOnboarding } from "../state/onboarding";
 import { use$ } from "applesauce-react/hooks";
 import { eventStore } from "../nostr/core";
 

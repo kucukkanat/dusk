@@ -7,7 +7,8 @@ import { openSheet, closeSheet, replaceSheet, copyText, toast } from "../state/u
 import { Screen } from "../ui/Screen";
 import { Avatar } from "../ui/primitives";
 import { Icon } from "../ui/Icon";
-import { SignIn, openOnboarding } from "./Onboarding";
+import { SignIn } from "./Onboarding";
+import { openOnboarding } from "../state/onboarding";
 
 const SIGNER = { extension: "Browser extension", bunker: "Remote signer", key: "Key on this device" } as const;
 

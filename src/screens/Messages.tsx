@@ -14,7 +14,7 @@ import { Empty, Endcap, Avatar, Name } from "../ui/primitives";
 import { SwipeRow } from "../ui/SwipeRow";
 import { Icon } from "../ui/Icon";
 import { RichText } from "../note/Content";
-import { openOnboarding } from "./Onboarding";
+import { openOnboarding } from "../state/onboarding";
 
 function ConvAvatar({ with: w }: { with: string[] }) {
   if (w.length === 1) return <Avatar pubkey={w[0]} />;

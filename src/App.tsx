@@ -13,7 +13,7 @@ import { dropLockedAccounts } from "./state/accounts";
 import { toast } from "./state/ui";
 import { Rail, TabBar, useAppBadge } from "./ui/Nav";
 import { openCompose } from "./sheets/Compose";
-import { openOnboarding, useOnboarding } from "./screens/Onboarding";
+import { openOnboarding, useOnboarding } from "./state/onboarding";
 import { Home } from "./screens/Home";
 import { pathFor } from "./lib/links";
 import { openShortcuts, useShortcuts } from "./screens/Shortcuts";

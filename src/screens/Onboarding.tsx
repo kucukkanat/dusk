@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { create } from "zustand";
 import { generateSeedWords } from "nostr-tools/nip06";
-import { useSettings } from "../state/settings";
-import { useAccounts } from "../state/accounts";
 import { loginExtension, loginBunker, loginKey, startNostrConnect, createAccount, hasExtension } from "../state/login";
 import { copyText, errorToast, toast } from "../state/ui";
 import { requestAll } from "../nostr/timeline";
@@ -12,27 +9,8 @@ import { Avatar, Field, Warn } from "../ui/primitives";
 import { useProfile, nameOf } from "../nostr/profile";
 import { SUGGESTED } from "../nostr/feeds";
 
-type Step = "welcome" | "name" | "backup" | "follows" | "signin";
-const useOnb = create<{ open: boolean; step: Step; mode: "first" | "add" }>()(() => ({ open: false, step: "welcome", mode: "first" }));
-
-export function openOnboarding(step: Step = "welcome", mode: "first" | "add" = "first") {
-  useOnb.setState({ open: true, step, mode });
-}
-export function closeOnboarding() {
-  useOnb.setState({ open: false });
-  useSettings.getState().set({ onboarded: true });
-}
-
-export function useOnboarding() {
-  const open = useOnb((s) => s.open);
-  const onboarded = useSettings((s) => s.onboarded);
-  const accounts = useAccounts((s) => s.accounts.length);
-  useEffect(() => {
-    if (!onboarded && !accounts) useOnb.setState({ open: true, step: "welcome", mode: "first" });
-  }, [onboarded, accounts]);
-  return open;
-}
-
+import { useOnb, closeOnboarding, type Step } from "../state/onboarding";
+export { openOnboarding, closeOnboarding, useOnboarding } from "../state/onboarding";
 
 function Shell({ children, step, total }: { children: React.ReactNode; step?: number; total?: number }) {
   const mode = useOnb((s) => s.mode);

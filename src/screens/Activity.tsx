@@ -14,7 +14,7 @@ import { Screen, Chips } from "../ui/Screen";
 import { Empty, Endcap, Avatar, FeedSkeleton } from "../ui/primitives";
 import { SwipeRow } from "../ui/SwipeRow";
 import { Icon, type IconName } from "../ui/Icon";
-import { openOnboarding } from "./Onboarding";
+import { openOnboarding } from "../state/onboarding";
 
 type Filter = "all" | "mentions" | "zaps" | "follows";
 const NK: Record<Notif["kind"], { tone: string; icon: IconName }> = {
