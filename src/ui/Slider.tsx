@@ -17,8 +17,11 @@ export function Slider({ container, selector, deps, className }: { container: Re
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduce = useSettings((s) => s.reduceMotion);
 
+  const self = useRef<HTMLSpanElement>(null);
+  // the highlight lives inside the container, so its parent is always there when effects run
+  const rootEl = () => (self.current?.parentElement as HTMLElement | null) ?? container.current;
   const measure = (): Box | null => {
-    const root = container.current;
+    const root = rootEl();
     const el = root?.querySelector<HTMLElement>(selector);
     if (!root || !el || !el.offsetParent) return null;
     const r = el.getBoundingClientRect();
@@ -42,6 +45,16 @@ export function Slider({ container, selector, deps, className }: { container: Re
     const x = Math.min(from.x, target.x);
     const y = Math.min(from.y, target.y);
     const union = { x, y, w: Math.max(from.x + from.w, target.x + target.w) - x, h: Math.max(from.y + from.h, target.y + target.h) - y };
+    // bulge sideways while travelling: wider on vertical moves, taller on horizontal ones
+    const dist = Math.hypot(target.x - from.x, target.y - from.y);
+    const bulge = Math.min(10, 3 + dist / 24);
+    if (Math.abs(target.y - from.y) >= Math.abs(target.x - from.x)) {
+      union.x -= bulge;
+      union.w += bulge * 2;
+    } else {
+      union.y -= bulge / 2;
+      union.h += bulge;
+    }
     setTransition(`left ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), top ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), width ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), height ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35)`);
     setBox(union);
     // 2. settle on the new item with a wobble
@@ -54,7 +67,7 @@ export function Slider({ container, selector, deps, className }: { container: Re
 
   // follow layout changes (resizes, breakpoint changes) without animating
   useLayoutEffect(() => {
-    const root = container.current;
+    const root = rootEl();
     if (!root) return;
     const ro = new ResizeObserver(() => {
       const t = measure();
@@ -70,6 +83,12 @@ export function Slider({ container, selector, deps, className }: { container: Re
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
-  if (!box) return null;
-  return <span aria-hidden="true" className={`pointer-events-none absolute z-0 ${className}`} style={{ left: box.x, top: box.y, width: box.w, height: box.h, transition }} />;
+  return (
+    <span
+      ref={self}
+      aria-hidden="true"
+      className={`pointer-events-none absolute z-0 ${className}`}
+      style={box ? { left: box.x, top: box.y, width: box.w, height: box.h, transition } : { display: "none" }}
+    />
+  );
 }
