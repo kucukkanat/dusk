@@ -5,7 +5,6 @@ import { RelayPool, RelayGroup, RelayLiveness } from "applesauce-relay";
 import { markFromCache, isFromCache } from "applesauce-core/helpers/event";
 import { createEventLoaderForStore } from "applesauce-loaders/loaders";
 import { NostrConnectSigner } from "applesauce-signers";
-import { WalletConnect } from "applesauce-wallet-connect";
 import { NostrIDB, openDB } from "nostr-idb";
 import { verifyEvent, verifiedSymbol } from "nostr-tools/pure";
 import { BehaviorSubject, Observable, takeUntil, timer } from "rxjs";
@@ -86,7 +85,6 @@ export function quick(relays: string[], filters: Filter | Filter[], opts?: Quick
   });
 }
 NostrConnectSigner.pool = pool;
-WalletConnect.pool = pool;
 
 /** The relays the active user reads from. Updated when their relay list (kind 10002) loads. */
 export const readRelays$ = new BehaviorSubject<string[]>(DEFAULT_RELAYS);

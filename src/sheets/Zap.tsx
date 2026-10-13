@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { NostrEvent } from "applesauce-core/helpers/event";
-import QRCode from "qrcode";
 import { fetchZapInvoice, payInvoice, hasWallet, canZap, useWallet, getLnurlPay } from "../nostr/zaps";
 import { pool, readRelays$, uniqRelays, DEFAULT_RELAYS, eventStore, now } from "../nostr/core";
 import { inboxesOf } from "../nostr/relays";
@@ -111,7 +110,7 @@ function InvoiceView({ pr, pubkey, amount }: { pr: string; pubkey: string; amoun
   const [qr, setQr] = useState<string>("");
   const [paid, setPaid] = useState(false);
   useEffect(() => {
-    QRCode.toDataURL("lightning:" + pr.toUpperCase(), { margin: 1, width: 280 }).then(setQr);
+    import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL("lightning:" + pr.toUpperCase(), { margin: 1, width: 280 })).then(setQr);
   }, [pr]);
   // watch for the zap receipt that proves payment
   useEffect(() => {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
-import QRCode from "qrcode";
 import { generateSeedWords } from "nostr-tools/nip06";
 import { useSettings } from "../state/settings";
 import { useAccounts } from "../state/accounts";
@@ -223,7 +222,7 @@ export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () =
     let connected = false;
     try {
       session = startNostrConnect(ac.signal);
-      QRCode.toDataURL(session.uri, { margin: 1, width: 260 }).then((img) => setQr({ uri: session!.uri, img }));
+      import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(session!.uri, { margin: 1, width: 260 })).then((img) => setQr({ uri: session!.uri, img }));
       session.done
         .then(() => {
           connected = true;

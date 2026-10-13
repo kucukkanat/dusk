@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getProfileContent } from "applesauce-core/helpers/profile";
-import { WalletConnect } from "applesauce-wallet-connect";
+import type { WalletConnect } from "applesauce-wallet-connect";
 import { makeZapRequest } from "nostr-tools/nip57";
 import { bech32 } from "@scure/base";
-import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "./core";
+import { eventStore, pool, readRelays$, uniqRelays, DEFAULT_RELAYS } from "./core";
 import { signEvent, getActivePubkey } from "../state/accounts";
 import { inboxesOf } from "./relays";
 import { lsGet, lsSet } from "../lib/kv";
@@ -93,16 +93,22 @@ type WalletState = { uri: string | null; balance: number | null; alias?: string;
 export const useWallet = create<WalletState>()(() => ({ uri: null, balance: null }));
 
 let wallet: WalletConnect | null = null;
+let gen = 0; // bumped on account switch or disconnect so a slow import can't install a stale wallet
+// wallet connect is only loaded by people who use it
+const nwc = () => import("applesauce-wallet-connect").then(({ WalletConnect }) => ((WalletConnect.pool = pool), WalletConnect));
 
 export function loadWallet(owner: string | null) {
   wallet = null;
+  gen++;
   const uri = owner ? lsGet<string | null>("nwc:" + owner, null) : null;
   useWallet.setState({ uri, balance: null, error: undefined, alias: undefined });
   if (uri) connectWallet(uri, false).catch(() => {});
 }
 
 export async function connectWallet(uri: string, save = true) {
-  const w = WalletConnect.fromConnectURI(uri.trim());
+  const g = ++gen;
+  const w = (await nwc()).fromConnectURI(uri.trim());
+  if (g !== gen) return;
   wallet = w;
   if (save) {
     const me = getActivePubkey();
@@ -132,6 +138,7 @@ export function disconnectWallet() {
   const me = getActivePubkey();
   if (me) lsSet("nwc:" + me, null);
   wallet = null;
+  gen++;
   useWallet.setState({ uri: null, balance: null, alias: undefined });
 }
 

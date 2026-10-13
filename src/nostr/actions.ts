@@ -92,9 +92,10 @@ export async function ensureLatest(kind: number, pubkey = getActivePubkey(), ide
   // the session is already fetching these; don't race it with a second request
   await sessionSynced(pubkey);
   const have = eventStore.getReplaceable(kind, pubkey, identifier);
-  // the session has synced and is listening for changes made elsewhere, so the store is authoritative (even when empty)
-  if (isLive(pubkey)) return have;
+  // the session has synced and is listening for changes made elsewhere, so a copy we hold is current
+  if (have && isLive(pubkey)) return have;
+  // a missing list may only be on a slower relay; writing a fresh one would wipe it, so take a short look
   const filter = identifier != null ? { kinds: [kind], authors: [pubkey], "#d": [identifier] } : { kinds: [kind], authors: [pubkey] };
-  await quick(uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS), filter, { settle: have ? 400 : 1200, cap: 4000 });
+  await quick(uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS), filter, { settle: have ? 400 : 800, cap: isLive(pubkey) ? 2000 : 4000 });
   return eventStore.getReplaceable(kind, pubkey, identifier);
 }

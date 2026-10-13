@@ -26,7 +26,7 @@ import { NoteCard, SWIPE_ACTIONS } from "../note/NoteCard";
 import { openEditProfile } from "../sheets/EditProfile";
 import { openShortcuts } from "./Shortcuts";
 import { openOnboarding } from "./Onboarding";
-import { SOURCES } from "./Home";
+import { SOURCES, openFeedAdd } from "./Home";
 
 const TITLES: Record<string, string> = {
   root: "Settings",
@@ -232,7 +232,7 @@ function Feeds() {
         ))}
       </Group>
       <div className="px-4 pt-4">
-        <button type="button" className="btn btn-secondary btn-lg" onClick={() => import("./Home").then((m) => m.openFeedAdd())}>
+        <button type="button" className="btn btn-secondary btn-lg" onClick={openFeedAdd}>
           <Icon name="plus" />
           Add a feed
         </button>

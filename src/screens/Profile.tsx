@@ -6,7 +6,6 @@ import { use$ } from "applesauce-react/hooks";
 import { getContacts } from "applesauce-core/helpers/contacts";
 import { getProfileBadgeSlots } from "applesauce-common/helpers/profile-badges";
 import { getBadgeImage, getBadgeName } from "applesauce-common/helpers/badge";
-import QRCode from "qrcode";
 import { eventStore, pool, quick, healthy, readRelays$, uniqRelays, LOOKUP_RELAYS, DEFAULT_RELAYS } from "../nostr/core";
 import { useProfile, nameOf, pictureOf, toneOf, formatNip05 } from "../nostr/profile";
 import { profileSpec, isReply } from "../nostr/feeds";
@@ -363,7 +362,7 @@ function QrSheet({ pubkey }: { pubkey: string }) {
   const [img, setImg] = useState("");
   const p = useProfile(pubkey);
   useEffect(() => {
-    QRCode.toDataURL("nostr:" + npub(pubkey), { margin: 1, width: 280 }).then(setImg);
+    import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL("nostr:" + npub(pubkey), { margin: 1, width: 280 })).then(setImg);
   }, [pubkey]);
   return (
     <div className="grid justify-items-center gap-3 text-center">
