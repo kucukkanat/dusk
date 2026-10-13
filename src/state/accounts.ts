@@ -6,14 +6,16 @@ import type { ISigner } from "applesauce-signers";
 import { encrypt as nip49encrypt } from "nostr-tools/nip49";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
-export type AccountType = "extension" | "bunker" | "key";
+export type AccountType = "extension" | "bunker" | "key" | "passkey";
 export type Account = {
   pubkey: string;
   type: AccountType;
   /** nbunksec for bunker sessions */
   nbunksec?: string;
-  /** Hex private key kept on this device */
+  /** Hex private key kept on this device (for passkey identities, the key derived from the passkey) */
   secret?: string;
+  /** Passkey credential id (base64url) the key was derived from */
+  credId?: string;
   /** Older builds stored a password-protected key here; those accounts must sign in again */
   ncryptsec?: string;
   added: number;
@@ -77,7 +79,7 @@ async function buildSigner(a: Account): Promise<ISigner> {
     return NostrConnectSigner.fromNbunksec(a.nbunksec);
   }
   if (a.secret) return new PrivateKeySigner(hexToBytes(a.secret));
-  throw new Error("Sign in again with your private key")
+  throw new Error(a.type === "passkey" ? "Sign in again with your passkey" : "Sign in again with your private key");
 }
 
 /**

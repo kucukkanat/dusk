@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { generateSeedWords } from "nostr-tools/nip06";
-import { loginExtension, loginBunker, loginKey, startNostrConnect, createAccount, hasExtension } from "../state/login";
+import { loginExtension, loginBunker, loginKey, loginPasskey, startNostrConnect, createAccount, hasExtension } from "../state/login";
+import { passkeySupported, createPasskey, unlockPasskey } from "../lib/passkey";
 import { copyText, errorToast, toast } from "../state/ui";
 import { requestAll } from "../nostr/timeline";
 import { LOOKUP_RELAYS, DEFAULT_RELAYS, uniqRelays } from "../nostr/core";
@@ -38,7 +39,32 @@ export function Onboarding() {
   const [saved, setSaved] = useState(false);
   const [picks, setPicks] = useState<Set<string>>(new Set(SUGGESTED.slice(0, 4)));
   const [busy, setBusy] = useState(false);
+  // how the new key is kept: a passkey (derived key, nothing to write down) or 12 seed words
+  const [keep, setKeep] = useState<"choose" | "words">(passkeySupported() ? "choose" : "words");
+  const [pk, setPk] = useState<{ sk: Uint8Array; credId: string } | null>(null);
+  const [pkPending, setPkPending] = useState<string | null>(null);
+  const [pkErr, setPkErr] = useState("");
   const go = (s: Step) => useOnb.setState({ step: s });
+  const usePasskey = async () => {
+    setPkErr("");
+    setBusy(true);
+    try {
+      if (pkPending) {
+        setPk(await unlockPasskey(pkPending));
+        go("follows");
+      } else {
+        const r = await createPasskey(name.trim());
+        if (r.sk) {
+          setPk({ sk: r.sk, credId: r.credId });
+          go("follows");
+        } else setPkPending(r.credId); // this browser only hands out the key when the passkey is used
+      }
+    } catch (e) {
+      setPkErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (step === "follows") requestAll(uniqRelays(LOOKUP_RELAYS, DEFAULT_RELAYS), [{ kinds: [0, 10002], authors: SUGGESTED }], 5000);
@@ -92,6 +118,28 @@ export function Onboarding() {
       </Shell>
     );
 
+  if (step === "backup" && keep === "choose")
+    return (
+      <Shell step={2} total={3}>
+        <h1 className="text-[28px] leading-[34px] font-semibold">How should we keep your key?</h1>
+        <p className="text-[16px] leading-6 text-muted">Your account is a key only you hold. Nobody, including Dusk, can reset it.</p>
+        <div className="grid gap-2">
+          <Option icon="lock" title="Passkey" sub="Face ID, fingerprint or your device PIN. Syncs with your password manager, so it works on your other devices too." selected={!!pkPending} onClick={usePasskey} />
+          <Option icon="key" title="12 words" sub="Write them down and keep them somewhere safe. Works anywhere." selected={false} onClick={() => setKeep("words")} />
+        </div>
+        {pkPending && (
+          <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={usePasskey}>
+            {busy ? "Waiting for passkey…" : "Finish with your passkey"}
+          </button>
+        )}
+        {busy && !pkPending && <p className="caption">Waiting for your passkey…</p>}
+        {pkErr && <p className="text-[13px] text-clay-ink">{pkErr}</p>}
+        <button type="button" className="btn btn-ghost" onClick={() => go("name")}>
+          Back
+        </button>
+      </Shell>
+    );
+
   if (step === "backup")
     return (
       <Shell step={2} total={3}>
@@ -115,6 +163,11 @@ export function Onboarding() {
         <button type="button" className="btn btn-primary btn-lg" disabled={!saved} onClick={() => go("follows")}>
           Continue
         </button>
+        {passkeySupported() && (
+          <button type="button" className="btn btn-ghost" onClick={() => setKeep("choose")}>
+            Use a passkey instead
+          </button>
+        )}
       </Shell>
     );
 
@@ -135,7 +188,7 @@ export function Onboarding() {
           onClick={async () => {
             setBusy(true);
             try {
-              await createAccount({ words, name: name.trim(), about: about.trim(), follows: [...picks] });
+              await createAccount({ ...(pk ? { passkey: pk } : { words }), name: name.trim(), about: about.trim(), follows: [...picks] });
               closeOnboarding();
               toast("Welcome to Dusk");
             } catch (e) {
@@ -185,7 +238,8 @@ function Option({ icon, title, sub, selected, onClick }: { icon: IconName; title
 
 export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () => void }) {
   const ext = hasExtension();
-  const [mode, setMode] = useState<"remote" | "extension" | "key">(ext ? "extension" : "remote");
+  const pkOk = passkeySupported();
+  const [mode, setMode] = useState<"passkey" | "remote" | "extension" | "key">(ext ? "extension" : pkOk ? "passkey" : "remote");
   const [value, setValue] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -226,7 +280,10 @@ export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () =
     setErr("");
     setBusy(true);
     try {
-      if (mode === "extension") await loginExtension();
+      if (mode === "passkey") {
+        const { sk, credId } = await unlockPasskey();
+        loginPasskey(sk, credId);
+      } else if (mode === "extension") await loginExtension();
       else if (mode === "remote") {
         if (!/^bunker:\/\//.test(value.trim())) throw new Error("Paste a bunker:// connection from your signer");
         await loginBunker(value);
@@ -244,6 +301,7 @@ export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () =
       <h1 className={embedded ? "text-xl font-semibold" : "text-[28px] leading-[34px] font-semibold"}>Sign in</h1>
       <p className="text-[15px] text-muted">Choose how Dusk should sign your notes.</p>
       <div className="grid gap-2" role="radiogroup">
+        {pkOk && <Option icon="lock" title="Passkey" sub="Use the passkey you made for Dusk, on this device or synced from another." selected={mode === "passkey"} onClick={() => setMode("passkey")} />}
         <Option icon="key" title="Remote signer" sub="Keep your key on another device. Safest on phones." selected={mode === "remote"} onClick={() => setMode("remote")} />
         <Option icon="server" title="Browser extension" sub={ext ? "Sign with an extension on this computer." : "No extension found in this browser."} selected={mode === "extension"} onClick={() => setMode("extension")} />
         <Option icon="warn" title="Private key" sub="Least safe. Only on a device you trust." selected={mode === "key"} onClick={() => setMode("key")} />
@@ -290,9 +348,10 @@ export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () =
             )}
           </>
         )}
-        {err && mode === "extension" && <p className="text-[13px] text-clay-ink">{err}</p>}
+        {mode === "passkey" && <p className="caption">Your device will ask for Face ID, your fingerprint or PIN.</p>}
+        {err && (mode === "extension" || mode === "passkey") && <p className="text-[13px] text-clay-ink">{err}</p>}
         <button type="submit" className="btn btn-primary btn-lg" disabled={busy || (mode === "extension" && !ext) || (mode === "remote" && !value.trim()) || (mode === "key" && (!value.trim() || (value.trim().startsWith("ncryptsec1") && !password)))}>
-          {busy ? "Connecting…" : "Continue"}
+          {busy ? (mode === "passkey" ? "Waiting for passkey…" : "Connecting…") : mode === "passkey" ? "Sign in with passkey" : "Continue"}
         </button>
       </form>
     </>

@@ -10,7 +10,7 @@ import { Icon } from "../ui/Icon";
 import { SignIn } from "./Onboarding";
 import { openOnboarding } from "../state/onboarding";
 
-const SIGNER = { extension: "Browser extension", bunker: "Remote signer", key: "Key on this device" } as const;
+const SIGNER = { extension: "Browser extension", bunker: "Remote signer", key: "Key on this device", passkey: "Passkey" } as const;
 
 function Card({ a, active }: { a: Account; active: boolean }) {
   const p = useProfile(a.pubkey);
@@ -73,7 +73,7 @@ function More({ a }: { a: Account }) {
             replaceSheet(
               <div className="grid gap-3">
                 <h2 className="text-xl font-semibold">Remove {nameOf(p, a.pubkey)} from this device?</h2>
-                <p className="text-[15px] text-muted">{a.type === "key" ? "The key is deleted from this browser. You'll need your backup to sign in again." : "You can sign in again any time with your signer."}</p>
+                <p className="text-[15px] text-muted">{a.type === "key" ? "The key is deleted from this browser. You'll need your backup to sign in again." : a.type === "passkey" ? "You can sign in again any time with your passkey." : "You can sign in again any time with your signer."}</p>
                 <button
                   type="button"
                   className="btn btn-danger btn-lg"
@@ -134,13 +134,17 @@ export function Identities() {
           <Card key={a.pubkey} a={a} active={a.pubkey === active} />
         ))}
       </div>
-      <div className="px-4">
-        <button type="button" className="btn btn-secondary btn-lg" onClick={openAddIdentity}>
+      <div className="grid gap-2 px-4">
+        <button type="button" className="btn btn-primary btn-lg" onClick={() => openOnboarding("name", "add")}>
           <Icon name="plus" />
-          Add identity
+          Create a new identity
+        </button>
+        <button type="button" className="btn btn-secondary btn-lg" onClick={openAddIdentity}>
+          <Icon name="key" />
+          Sign in to another
         </button>
       </div>
-      <p className="px-4 pt-3 text-[13px] text-muted">Keys stay in your signer, your browser extension, or in this browser. Dusk never uploads them.</p>
+      <p className="px-4 pt-3 text-[13px] text-muted">Keys stay in your signer, your browser extension, your passkey, or in this browser. Dusk never uploads them.</p>
     </Screen>
   );
 }

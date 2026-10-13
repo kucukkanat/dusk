@@ -114,7 +114,7 @@ function Root() {
       </Group>
       <Group label="Account">
         <Row icon="people" title="Identities" sub={`${accounts.length} on this device · switch or add one`} to="/identities" />
-        {me && <Row icon="key" title="Keys and sign-in" sub={account ? { extension: "Browser extension", bunker: "Remote signer", key: "Key on this device" }[account.type] : ""} to="/settings/account" />}
+        {me && <Row icon="key" title="Keys and sign-in" sub={account ? { extension: "Browser extension", bunker: "Remote signer", key: "Key on this device", passkey: "Passkey" }[account.type] : ""} to="/settings/account" />}
         <Row icon="server" title="Servers" sub={`${relays.length} relays`} to="/settings/servers" />
         {me && <Row icon="message" title="Message servers" sub="Where private messages reach you" to="/settings/inbox" />}
         {me && <Row icon="image" title="Media servers" sub={hostOf(mediaServers()[0] ?? "")} to="/settings/media" />}
@@ -709,12 +709,12 @@ function Account() {
   const nav = useNavigate();
   const remove = useAccounts((s) => s.remove);
   if (!account) return <Empty title="Not signed in" />;
-  const signer = { extension: "Browser extension", bunker: "Remote signer · your key stays in your signer app", key: "Key kept in this browser" }[account.type];
+  const signer = { extension: "Browser extension", bunker: "Remote signer · your key stays in your signer app", key: "Key kept in this browser", passkey: "Passkey · key kept in this browser" }[account.type];
   return (
     <>
       <Group label="Signing">
         <Row icon="key" title="Signed in with" sub={signer} />
-        {account.type === "key" && <Row icon="lock" title="Back up your key" sub="Show or export your private key" onClick={() => openSheet(<Backup />, { label: "Back up your key" })} />}
+        {(account.type === "key" || account.type === "passkey") && <Row icon="lock" title="Back up your key" sub="Show or export your private key" onClick={() => openSheet(<Backup />, { label: "Back up your key" })} />}
         {account.type === "bunker" && (
           <Row
             icon="refresh"
@@ -761,7 +761,7 @@ function Backup() {
   const [shown, setShown] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [mode, setMode] = useState<"nsec" | "ncryptsec">("nsec");
-  if (!account || account.type !== "key") return null;
+  if (!account || (account.type !== "key" && account.type !== "passkey")) return null;
   if (!account.secret) return <p className="text-[15px] text-muted">Use your key once (post or react) so Dusk can open it, then come back here.</p>;
   const sk = hexToBytes(account.secret);
   return (

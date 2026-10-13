@@ -74,10 +74,20 @@ export function loginKey(input: string, password?: string) {
   return finish(pubkey);
 }
 
-/** Create a brand new identity from seed words, publish a profile, relay lists and first follows. */
-export async function createAccount(opts: { words: string; name: string; about?: string; follows: string[] }) {
-  const sk = privateKeyFromSeedWords(opts.words);
-  const pubkey = loginKey(Buffer_hex(sk));
+/** Sign in with the key derived from a passkey; it's kept on this device like a pasted key. */
+export function loginPasskey(sk: Uint8Array, credId: string) {
+  const pubkey = getPublicKey(sk);
+  setSigner(pubkey, new PrivateKeySigner(sk));
+  useAccounts.getState().add({ pubkey, type: "passkey", secret: Buffer_hex(sk), credId, added: now() });
+  return finish(pubkey);
+}
+
+/** Create a brand new identity (from seed words or a passkey), publish a profile, relay lists and first follows. */
+export async function createAccount(opts: { words?: string; passkey?: { sk: Uint8Array; credId: string }; name: string; about?: string; follows: string[] }) {
+  let pubkey: string;
+  if (opts.passkey) pubkey = loginPasskey(opts.passkey.sk, opts.passkey.credId);
+  else if (opts.words) pubkey = loginKey(Buffer_hex(privateKeyFromSeedWords(opts.words)));
+  else throw new Error("Choose how to keep your key");
   const relayTags = DEFAULT_RELAYS.map((r) => ["r", r]);
   await Promise.allSettled([
     publish({ kind: 0, content: JSON.stringify({ name: opts.name, display_name: opts.name, about: opts.about ?? "" }) }),
