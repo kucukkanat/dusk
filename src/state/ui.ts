@@ -1,3 +1,4 @@
+import { morph } from "../lib/morph";
 import type { ReactNode } from "react";
 import { create } from "zustand";
 
@@ -47,8 +48,19 @@ export const openSheet = (node: ReactNode, opts?: { label?: string; wide?: boole
 export const closeSheet = (id?: number) => useUI.getState().closeSheet(id);
 export const replaceSheet = (node: ReactNode) => useUI.getState().replaceSheet(node);
 
-export function openLightbox(urls: string[], index = 0, alts?: (string | undefined)[]) {
-  useUI.setState({ lightbox: { urls, index, alts } });
+/** The thumbnail a photo opened from, so closing can morph back into it. */
+let lightboxFrom: { el: Element; index: number } | null = null;
+
+export function openLightbox(urls: string[], index = 0, alts?: (string | undefined)[], from?: Element | null) {
+  lightboxFrom = from ? { el: from, index } : null;
+  morph(() => useUI.setState({ lightbox: { urls, index, alts } }), { from, key: "photo" });
+}
+
+export function closeLightbox() {
+  const lb = useUI.getState().lightbox;
+  const back = lightboxFrom && lb && lb.index === lightboxFrom.index && lightboxFrom.el.isConnected ? lightboxFrom.el : null;
+  lightboxFrom = null;
+  morph(() => useUI.setState({ lightbox: null }), { from: back && document.querySelector("[data-lightbox-photo]"), to: () => back });
 }
 
 export async function copyText(text: string, msg = "Copied") {

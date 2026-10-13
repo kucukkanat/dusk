@@ -10,7 +10,7 @@ import { eventPath } from "../lib/links";
 import { ago, plural } from "../lib/format";
 import { errorToast, toast } from "../state/ui";
 import { Screen, Chips } from "../ui/Screen";
-import { Empty, Spinner, Avatar, Name } from "../ui/primitives";
+import { Empty, Avatar, Name, FeedSkeleton } from "../ui/primitives";
 import { NoteCard } from "../note/NoteCard";
 import { Icon } from "../ui/Icon";
 import { getDrafts, deleteDraft, openCompose, type Draft } from "../sheets/Compose";
@@ -123,7 +123,7 @@ export function Lists() {
           <ListCard key={e.id} e={e} />
         ))}
       </div>
-      {loading && <Spinner />}
+      {loading && <FeedSkeleton />}
       {!loading && !list.length && <Empty title={tab === "mine" ? "No lists yet" : "No packs found"}>{tab === "mine" ? "Group people into lists from their profile, then add a list as a feed." : "Follow packs from people you follow show up here."}</Empty>}
     </Screen>
   );

@@ -52,6 +52,19 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     return () => el.removeEventListener("scroll", onScroll);
   }, [key, chat]);
 
+  // chats stay pinned to the newest message when the scroller shrinks (keyboard opening) or grows
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !chat) return;
+    let atBottom = true;
+    const onScroll = () => (atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48);
+    const ro = new ResizeObserver(() => atBottom && (el.scrollTop = el.scrollHeight));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => (el.removeEventListener("scroll", onScroll), ro.disconnect());
+  }, [chat]);
+
   // infinite scroll
   useEffect(() => {
     if (!onEnd || !endRef.current) return;
@@ -115,7 +128,7 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     let x0 = 0, y0 = 0, t0 = 0, dx = 0;
     let state: "idle" | "maybe" | "drag" = "idle";
     const set = (x: number, animate: boolean) => {
-      el.style.transition = animate ? "transform 220ms var(--ease-calm)" : "none";
+      el.style.transition = animate ? (x ? "transform 200ms var(--ease-calm)" : "transform var(--spring-ms) var(--ease-spring)") : "none";
       el.style.transform = x ? `translateX(${x}px)` : "";
       el.style.boxShadow = x ? "-12px 0 32px rgba(0, 0, 0, 0.25)" : "";
     };

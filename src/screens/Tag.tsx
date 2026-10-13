@@ -6,7 +6,7 @@ import { useTimeline } from "../nostr/timeline";
 import { useMyMutes, isMuted, setMute } from "../nostr/lists";
 import { Screen } from "../ui/Screen";
 import { NoteList } from "../note/NoteCard";
-import { Empty, Endcap, Spinner } from "../ui/primitives";
+import { Empty, Endcap, FeedSkeleton } from "../ui/primitives";
 import { Icon } from "../ui/Icon";
 import { requireSignIn } from "../note/actions";
 import { toast } from "../state/ui";
@@ -57,7 +57,7 @@ export function Tag() {
       }
     >
       <NoteList events={visible} />
-      {loading && <Spinner />}
+      {loading && <FeedSkeleton />}
       {loadedOnce && !loading && !visible.length && <Empty title="No notes yet">Nobody on your servers has used #{tag} recently.</Empty>}
       {done && visible.length > 0 && <Endcap>That's all for #{tag}</Endcap>}
     </Screen>

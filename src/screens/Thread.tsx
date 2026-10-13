@@ -13,7 +13,7 @@ import { decodeAny, isAddressable } from "../lib/links";
 import { naddrEncode } from "nostr-tools/nip19";
 import { Screen } from "../ui/Screen";
 import { NoteCard } from "../note/NoteCard";
-import { Empty, Spinner, Endcap, Avatar } from "../ui/primitives";
+import { Empty, Endcap, Avatar, FeedSkeleton } from "../ui/primitives";
 import { Icon } from "../ui/Icon";
 import { openCompose } from "../sheets/Compose";
 import { openNoteMenu } from "../sheets/NoteMenu";
@@ -88,7 +88,7 @@ export function Thread() {
         timedOut ? (
           <Empty title="Note not found">None of the servers Dusk asked have this note. It may have been deleted.</Empty>
         ) : (
-          <Spinner />
+          <FeedSkeleton count={1} label="Loading note" />
         )
       ) : (
         <ThreadBody event={event} />
@@ -149,7 +149,7 @@ function ThreadBody({ event }: { event: NostrEvent }) {
           </button>
         </div>
       )}
-      {loading && <Spinner />}
+      {loading && <FeedSkeleton count={2} label="Loading replies" />}
       {!loading && !replies.length && <Endcap>No replies yet</Endcap>}
     </>
   );
@@ -158,7 +158,7 @@ function ThreadBody({ event }: { event: NostrEvent }) {
 function ReplyBar({ event }: { event: NostrEvent }) {
   const me = useActivePubkey();
   return (
-    <div className="flex-none border-t border-line bg-bg px-4 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))]">
+    <div className="flex-none border-t border-line bg-bg px-4 pt-2 pb-[calc(8px+var(--safe-b))]">
       <button type="button" className="mx-auto flex min-h-11 w-full max-w-[600px] items-center gap-3 rounded-full border border-line bg-surface px-3 text-left text-[15px] text-subtle" onClick={() => requireSignIn() && openCompose({ replyTo: event })}>
         {me ? <Avatar pubkey={me} size="sm" /> : <Icon name="reply" />}
         Reply to {displayName(event.pubkey).split(" ")[0]}…

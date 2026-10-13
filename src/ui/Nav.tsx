@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -7,7 +7,7 @@ import { useActivePubkey, useAccounts } from "../state/accounts";
 import { useSettings } from "../state/settings";
 import { openSheet, closeSheet, replaceSheet } from "../state/ui";
 import { openCompose } from "../sheets/Compose";
-import { useHasUnreadActivity } from "../nostr/notifications";
+import { useUnreadActivityCount } from "../nostr/notifications";
 import { useConversations } from "../nostr/dms";
 import { useFollowing } from "../nostr/lists";
 import { Icon, type IconName } from "./Icon";
@@ -29,12 +29,27 @@ export const NAV_ITEMS: Record<string, NavItem> = {
 };
 
 
-function useDots() {
+function useUnreadCounts() {
   const me = useActivePubkey();
-  const activity = useHasUnreadActivity();
+  const activity = useUnreadActivityCount();
   const follows = useFollowing(me);
   const convs = useConversations(follows);
-  return { activity, messages: convs.some((c) => c.unread > 0 && !c.isRequest) } as Record<string, boolean>;
+  return { activity, messages: convs.reduce((n, c) => n + (c.isRequest ? 0 : c.unread), 0) };
+}
+
+function useDots() {
+  const c = useUnreadCounts();
+  return { activity: c.activity > 0, messages: c.messages > 0 } as Record<string, boolean>;
+}
+
+/** Unread activity and messages as a badge on the home-screen icon. (iOS shows it only once notifications are allowed.) */
+export function useAppBadge() {
+  const { activity, messages } = useUnreadCounts();
+  const n = activity + messages;
+  useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  }, [n]);
 }
 
 /** The nav item a path belongs to. */
@@ -175,7 +190,7 @@ export function TabBar() {
   const tab = (on: boolean) => `relative z-[1] flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-[14px] font-semibold tracking-wide ${on ? "text-ink" : "text-muted"}`;
   const pill = (on: boolean) => `grid h-[30px] w-14 place-items-center rounded-full transition-colors duration-300 ${on ? "text-on-accent" : ""}`;
   return (
-    <nav ref={ref} className="relative z-20 flex h-[calc(64px+env(safe-area-inset-bottom))] border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Main">
+    <nav ref={ref} className="kb-hide relative z-20 flex h-[calc(64px+var(--safe-b))] border-t border-line bg-surface pb-[var(--safe-b)] md:hidden" aria-label="Main">
       <Slider container={ref} selector='[data-active="true"] [data-pill]' deps={[active, shown.join()]} className="rounded-full bg-accent" />
       {shown.map((id) => {
         const it = NAV_ITEMS[id];

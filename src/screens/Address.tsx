@@ -235,7 +235,7 @@ function Live({ event }: { event: NostrEvent }) {
       chat
       footer={
         <form
-          className="flex flex-none gap-2 border-t border-line bg-bg px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))]"
+          className="flex flex-none gap-2 border-t border-line bg-bg px-3 pt-2 pb-[calc(8px+var(--safe-b))]"
           onSubmit={(e) => {
             e.preventDefault();
             send();

@@ -177,10 +177,14 @@ export function useNotifications(): Notif[] {
   }, [events, me, read]);
 }
 
-export function useHasUnreadActivity() {
+export function useUnreadActivityCount() {
   const items = useNotifications();
   const notif = useSettings((s) => s.notif);
-  return items.some((n) => n.unread && (notif.likes || (n.kind !== "like" && n.kind !== "repost")));
+  return items.filter((n) => n.unread && (notif.likes || (n.kind !== "like" && n.kind !== "repost"))).length;
+}
+
+export function useHasUnreadActivity() {
+  return useUnreadActivityCount() > 0;
 }
 
 /** Remember who followed us so their next follow-list edit doesn't show up again. */

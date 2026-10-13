@@ -8,7 +8,7 @@ import { useActivePubkey } from "../state/accounts";
 import { useFollowing, useMyMutes, isMuted } from "../nostr/lists";
 import { pathFor, tagPath } from "../lib/links";
 import { Screen } from "../ui/Screen";
-import { Empty, Spinner } from "../ui/primitives";
+import { Empty, FeedSkeleton } from "../ui/primitives";
 import { PersonRow } from "../ui/PersonRow";
 import { NoteList } from "../note/NoteCard";
 import { Icon } from "../ui/Icon";
@@ -141,7 +141,7 @@ function Results({ q }: { q: string }) {
           <NoteList events={visibleNotes} />
         </>
       )}
-      {loading && <Spinner />}
+      {loading && <FeedSkeleton count={3} />}
       {!loading && !people.length && !visibleNotes.length && !tag && <Empty title="No results">Nothing matches “{query}”. Try a name, an address like name@domain.com, or a #tag.</Empty>}
     </>
   );

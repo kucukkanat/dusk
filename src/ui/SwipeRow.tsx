@@ -82,7 +82,7 @@ export function SwipeRow({ start, end, children, onLongPress }: { start?: SwipeS
       )}
       <div
         className="relative z-[1] bg-surface"
-        style={{ transform: `translateX(${x}px)`, transition: dragging ? "none" : "transform 220ms var(--ease-calm)" }}
+        style={{ transform: `translateX(${x}px)`, transition: dragging ? "none" : "transform var(--spring-ms) var(--ease-spring)" }}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}

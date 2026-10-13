@@ -1,5 +1,6 @@
 import { useState, type ReactNode, type ButtonHTMLAttributes } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { morph, morphTarget } from "../lib/morph";
 import { Icon, type IconName } from "./Icon";
 import { useProfile, nameOf, pictureOf, toneOf, useNip05, formatNip05 } from "../nostr/profile";
 import { initials } from "../lib/format";
@@ -9,7 +10,7 @@ import { useSettings } from "../state/settings";
 const TONE_BG: Record<string, string> = { mist: "bg-mist", peach: "bg-peach", rose: "bg-rose", sage: "bg-sage", lilac: "bg-lilac", butter: "bg-butter" };
 const SIZE = { xs: "size-[22px] text-[10px]", sm: "size-7 text-xs", md: "size-10 text-[15px]", lg: "size-[72px] text-[26px]", xl: "size-24 text-[32px]" };
 
-export function Avatar({ pubkey, size = "md", ring, className = "" }: { pubkey: string; size?: keyof typeof SIZE; ring?: boolean; className?: string }) {
+export function Avatar({ pubkey, size = "md", ring, className = "", morphKey }: { pubkey: string; size?: keyof typeof SIZE; ring?: boolean; className?: string; morphKey?: string }) {
   const p = useProfile(pubkey);
   const pic = pictureOf(p);
   const dataSaver = useSettings((s) => s.dataSaver);
@@ -17,6 +18,7 @@ export function Avatar({ pubkey, size = "md", ring, className = "" }: { pubkey: 
   const show = pic && !broken && !(dataSaver && size !== "lg" && size !== "xl");
   return (
     <span
+      ref={morphKey ? morphTarget(morphKey) : undefined}
       className={`relative inline-grid flex-none place-items-center overflow-hidden rounded-full font-semibold text-on-accent ${SIZE[size]} ${show ? "bg-raised" : TONE_BG[toneOf(pubkey)]} ${ring ? "shadow-[0_0_0_2px_var(--bg),0_0_0_4px_var(--lilac)]" : ""} ${className}`}
       aria-hidden="true"
     >
@@ -27,8 +29,20 @@ export function Avatar({ pubkey, size = "md", ring, className = "" }: { pubkey: 
 
 export function AvatarLink({ pubkey, size = "md", className }: { pubkey: string; size?: keyof typeof SIZE; className?: string }) {
   const p = useProfile(pubkey);
+  const nav = useNavigate();
+  const to = profilePath(pubkey);
   return (
-    <Link to={profilePath(pubkey)} aria-label={"View " + nameOf(p, pubkey)} className={"rounded-full " + (className ?? "")} onClick={(e) => e.stopPropagation()}>
+    <Link
+      to={to}
+      aria-label={"View " + nameOf(p, pubkey)}
+      className={"rounded-full " + (className ?? "")}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        morph(() => nav(to), { from: e.currentTarget.firstElementChild, key: "avatar:" + pubkey });
+      }}
+    >
       <Avatar pubkey={pubkey} size={size} />
     </Link>
   );
@@ -127,6 +141,29 @@ export function Spinner({ label = "Loading", className = "" }: { label?: string;
   return (
     <div className={`flex justify-center py-8 ${className}`} role="status" aria-label={label}>
       <span className="spinner" />
+    </div>
+  );
+}
+
+/** Placeholder rows shaped like notes, shown while a feed loads. */
+export function FeedSkeleton({ count = 4, label = "Loading" }: { count?: number; label?: string }) {
+  const widths = [["92%", "78%", "40%"], ["85%", "60%"], ["96%", "88%", "70%", "35%"], ["70%"]];
+  return (
+    <div role="status" aria-label={label} className="[&>*+*]:border-t [&>*+*]:border-line">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="grid grid-cols-[40px_1fr] gap-3 bg-surface px-4 py-4" aria-hidden="true">
+          <span className="skeleton size-10 rounded-full" />
+          <div className="min-w-0 pt-0.5">
+            <div className="mb-3 flex gap-2">
+              <span className="skeleton h-3.5 w-28 rounded-md" />
+              <span className="skeleton h-3.5 w-10 rounded-md" />
+            </div>
+            {widths[i % widths.length].map((w, j) => (
+              <span key={j} className="skeleton mb-2 block h-3 rounded-md" style={{ width: w }} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

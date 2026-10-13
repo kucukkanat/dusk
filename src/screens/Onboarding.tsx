@@ -39,7 +39,7 @@ function Shell({ children, step, total }: { children: React.ReactNode; step?: nu
   const mode = useOnb((s) => s.mode);
   return (
     <div data-fill className="fixed inset-0 z-50 overflow-y-auto bg-bg animate-fade">
-      <div className="mx-auto flex min-h-full max-w-[460px] flex-col gap-4 px-6 pt-[calc(24px+env(safe-area-inset-top))] pb-[calc(32px+env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex min-h-full max-w-[460px] flex-col gap-4 px-6 pt-[calc(24px+env(safe-area-inset-top))] pb-[calc(32px+var(--safe-b))]">
         <div className="flex items-center justify-between">
           {step ? <span className="text-[13px] font-semibold tracking-wide text-muted uppercase">{`Step ${step} of ${total}`}</span> : <span />}
           <button type="button" className="iconbtn" aria-label="Close" onClick={closeOnboarding}>

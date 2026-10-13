@@ -14,7 +14,7 @@ import { useFollowing, useMyMutes, setMute, addToSet, createSet } from "../nostr
 import { pubkeyFrom, npub, shareUrl, profilePath, eventPath } from "../lib/links";
 import { openSheet, closeSheet, copyText, toast, openLightbox, replaceSheet, errorToast } from "../state/ui";
 import { Screen, Chips } from "../ui/Screen";
-import { Avatar, Nip05, Empty, Spinner, Endcap, Field } from "../ui/primitives";
+import { Avatar, Nip05, Empty, Endcap, Field, FeedSkeleton } from "../ui/primitives";
 import { PersonRow, FollowButton } from "../ui/PersonRow";
 import { NoteList } from "../note/NoteCard";
 import { Icon } from "../ui/Icon";
@@ -120,7 +120,7 @@ function ProfileView({ pubkey, isMeTab }: { pubkey: string; isMeTab?: boolean })
       }
     >
       {p?.banner ? (
-        <button type="button" className="block h-32 w-full overflow-hidden bg-raised md:h-40" onClick={() => openLightbox([p.banner!])} aria-label="View banner">
+        <button type="button" className="block h-32 w-full overflow-hidden bg-raised md:h-40" onClick={(e) => openLightbox([p.banner!], 0, undefined, e.currentTarget.firstElementChild)} aria-label="View banner">
           <img src={p.banner} alt="" className="size-full object-cover" />
         </button>
       ) : (
@@ -128,8 +128,8 @@ function ProfileView({ pubkey, isMeTab }: { pubkey: string; isMeTab?: boolean })
       )}
       <div className="bg-surface px-4 pb-4">
         <div className="-mt-9 flex items-end justify-between gap-2">
-          <button type="button" className="rounded-full shadow-[0_0_0_4px_var(--surface)]" onClick={() => (isMe ? openEditProfile() : pic && openLightbox([pic]))} aria-label={isMe ? "Edit profile" : `View ${name}'s photo`}>
-            <Avatar pubkey={pubkey} size="lg" />
+          <button type="button" className="rounded-full shadow-[0_0_0_4px_var(--surface)]" onClick={(e) => (isMe ? openEditProfile() : pic && openLightbox([pic], 0, undefined, e.currentTarget.firstElementChild))} aria-label={isMe ? "Edit profile" : `View ${name}'s photo`}>
+            <Avatar pubkey={pubkey} size="lg" morphKey={"avatar:" + pubkey} />
           </button>
           <div className="flex gap-2 pb-1">
             {isMe ? (
@@ -226,7 +226,7 @@ function ProfileView({ pubkey, isMeTab }: { pubkey: string; isMeTab?: boolean })
       ) : (
         <>
           <NoteList events={events} />
-          {loading && <Spinner />}
+          {loading && <FeedSkeleton count={2} />}
           {loadedOnce && !loading && !events.length && <Empty title="Nothing here yet">{tab === "articles" ? "No long reads yet." : tab === "media" ? "No photos or videos yet." : "Notes will show up here."}</Empty>}
           {done && events.length > 0 && <Endcap>That's everything</Endcap>}
         </>

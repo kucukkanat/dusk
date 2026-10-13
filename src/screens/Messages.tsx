@@ -170,7 +170,7 @@ function FileBubble({ m }: { m: DM }) {
   }, [m, type]);
   if (err) return <span className="text-[14px] text-muted">Couldn't open this file</span>;
   if (!url) return <span className="spinner" />;
-  if (type.startsWith("image/")) return <img src={url} alt="" className="max-h-72 cursor-zoom-in rounded-[12px]" onClick={() => openLightbox([url])} />;
+  if (type.startsWith("image/")) return <img src={url} alt="" className="max-h-72 cursor-zoom-in rounded-[12px]" onClick={(e) => openLightbox([url], 0, undefined, e.currentTarget)} />;
   if (type.startsWith("video/")) return <video src={url} controls className="max-h-72 rounded-[12px]" />;
   return (
     <a href={url} download className="underline">
@@ -254,7 +254,7 @@ export function Chat() {
       }
       footer={
         <form
-          className="flex flex-none items-end gap-2 border-t border-line bg-bg px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))]"
+          className="flex flex-none items-end gap-2 border-t border-line bg-bg px-3 pt-2 pb-[calc(8px+var(--safe-b))]"
           onSubmit={(e) => {
             e.preventDefault();
             send();

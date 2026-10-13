@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
-import { useUI, closeSheet } from "../state/ui";
+import { useUI, closeSheet, closeLightbox } from "../state/ui";
+import { morphTarget } from "../lib/morph";
 import { Icon } from "./Icon";
 
 /** Bottom sheets on phones, centred cards on wider screens. Drag the handle down to close. */
@@ -36,6 +37,8 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
   const [y, setY] = useState(0);
   const [drag, setDrag] = useState(false);
   const start = useRef<number | null>(null);
+  const last = useRef({ y: 0, t: 0, v: 0 });
+  const [leaving, setLeaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,19 +52,27 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
 
   const onDown = (e: React.PointerEvent) => {
     start.current = e.clientY;
+    last.current = { y: e.clientY, t: e.timeStamp, v: 0 };
     setDrag(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onMove = (e: React.PointerEvent) => {
     if (start.current == null) return;
+    const l = last.current;
+    const dt = e.timeStamp - l.t;
+    if (dt > 0) last.current = { y: e.clientY, t: e.timeStamp, v: 0.8 * ((e.clientY - l.y) / dt) + 0.2 * l.v };
     setY(Math.max(0, e.clientY - start.current));
   };
   const onUp = () => {
     if (start.current == null) return;
     start.current = null;
     setDrag(false);
-    if (y > 120) closeSheet(id);
-    else setY(0);
+    // a quick downward flick closes it too, and the sheet carries on off screen before it goes
+    if (y > 120 || (last.current.v > 0.5 && y > 16)) {
+      setLeaving(true);
+      setY(ref.current?.offsetHeight ?? 600);
+      setTimeout(() => closeSheet(id), 200);
+    } else setY(0);
   };
 
   return (
@@ -69,9 +80,11 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
       <div className="absolute inset-0 bg-scrim animate-fade" onClick={() => closeSheet(id)} />
       <div
         ref={ref}
-        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[88%] flex-col rounded-t-[24px] bg-raised px-5 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-[var(--shadow-sheet)] animate-sheet md:bottom-6 md:max-h-[calc(100%-64px)] md:rounded-[24px] ${wide ? "md:max-w-[640px]" : "md:max-w-[520px]"}`}
-        style={{ transform: `translateY(${y}px)`, transition: drag ? "none" : "transform 220ms var(--ease-calm)" }}
+        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[88%] flex-col rounded-t-[24px] bg-raised px-5 pb-[calc(20px+var(--safe-b))] shadow-[var(--shadow-sheet)] animate-sheet md:bottom-6 md:max-h-[calc(100%-64px)] md:rounded-[24px] ${wide ? "md:max-w-[640px]" : "md:max-w-[520px]"}`}
+        style={{ transform: `translateY(${y}px)`, transition: drag ? "none" : leaving ? "transform 200ms var(--ease-calm)" : "transform var(--spring-ms) var(--ease-spring)" }}
       >
+        {/* bleeds below the sheet so the spring's overshoot never shows a gap */}
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-full h-24 bg-raised md:hidden" />
         <button type="button" data-grab aria-label="Close" className="relative h-7 w-full flex-none cursor-grab touch-none after:absolute after:top-2.5 after:left-1/2 after:-ml-[18px] after:h-1 after:w-9 after:rounded-full after:bg-line-strong" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onClick={() => y === 0 && !drag && closeSheet(id)} />
         <div className="min-h-0 overflow-y-auto pb-2">{children}</div>
       </div>
@@ -82,7 +95,7 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
 export function Toasts() {
   const toasts = useUI((s) => s.toasts);
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom))] z-[70] flex flex-col items-center gap-2 px-4 md:bottom-6" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+var(--safe-b))] z-[70] flex flex-col items-center gap-2 px-4 md:bottom-6" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.id} className={`pointer-events-auto flex min-h-[52px] w-full max-w-[420px] items-center gap-3 rounded-[14px] border border-line bg-raised pr-2 pl-4 text-[15px] font-medium shadow-[var(--shadow-sheet)] animate-fade ${t.tone === "error" ? "text-clay-ink" : ""}`}>
           <span className="flex-1 py-3">{t.text}</span>
@@ -119,7 +132,7 @@ function ZoomImage({ src, alt, onSwipe, onClose }: { src: string; alt: string; o
     const el = ref.current;
     if (!el) return;
     const { s, x, y } = v.current;
-    el.style.transition = animate ? "transform 220ms var(--ease-calm)" : "none";
+    el.style.transition = animate ? "transform var(--spring-ms) var(--ease-spring)" : "none";
     el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
   };
   const center = (): Pt => {
@@ -196,7 +209,11 @@ function ZoomImage({ src, alt, onSwipe, onClose }: { src: string; alt: string; o
 
   return (
     <img
-      ref={ref}
+      ref={(el) => {
+        ref.current = el;
+        morphTarget("photo")(el);
+      }}
+      data-lightbox-photo
       src={src}
       alt={alt}
       className="max-h-full max-w-full touch-none object-contain will-change-transform select-none"
@@ -211,7 +228,7 @@ function ZoomImage({ src, alt, onSwipe, onClose }: { src: string; alt: string; o
 
 export function Lightbox() {
   const lb = useUI((s) => s.lightbox);
-  const close = () => useUI.setState({ lightbox: null });
+  const close = closeLightbox;
   useEffect(() => {
     if (!lb) return;
     const onKey = (e: KeyboardEvent) => {
@@ -246,7 +263,7 @@ export function Lightbox() {
         )}
       </div>
       {(alt || lb.urls.length > 1) && (
-        <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))] text-center text-[14px] text-white/80" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 pb-[calc(16px+var(--safe-b))] text-center text-[14px] text-white/80" onClick={(e) => e.stopPropagation()}>
           {alt}
           {lb.urls.length > 1 && <div className="mt-1 text-white/50">{`${lb.index + 1} of ${lb.urls.length}`}</div>}
         </div>

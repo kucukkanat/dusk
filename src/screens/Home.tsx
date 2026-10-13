@@ -8,7 +8,7 @@ import { normalizeRelay } from "../nostr/core";
 import { openSheet, closeSheet, toast } from "../state/ui";
 import { Screen, Chips } from "../ui/Screen";
 import { NoteList } from "../note/NoteCard";
-import { Empty, Endcap, Spinner, Field } from "../ui/primitives";
+import { Empty, Endcap, Field, FeedSkeleton } from "../ui/primitives";
 import { Icon } from "../ui/Icon";
 import { openOnboarding } from "./Onboarding";
 import { use$ } from "applesauce-react/hooks";
@@ -51,7 +51,7 @@ export function FeedView({ feed }: { feed: Feed }) {
       ) : (
         <>
           <NoteList events={visible} />
-          {loading && <Spinner />}
+          {loading && <FeedSkeleton count={visible.length ? 1 : 4} />}
           {loadedOnce && !loading && !visible.length && (
             <Empty title={error ? "Couldn't load this feed" : "Nothing here yet"}>{error ?? (feed.src === "following" ? "Follow a few people and their notes will show up here." : "Notes from this feed will show up here.")}</Empty>
           )}

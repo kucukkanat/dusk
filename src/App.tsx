@@ -10,7 +10,7 @@ import { SheetHost, Toasts, Lightbox } from "./ui/Overlays";
 import { dropLockedAccounts } from "./state/accounts";
 import { toast } from "./state/ui";
 import { openOnboarding } from "./screens/Onboarding";
-import { Rail, TabBar } from "./ui/Nav";
+import { Rail, TabBar, useAppBadge } from "./ui/Nav";
 import { openCompose } from "./sheets/Compose";
 import { Onboarding, useOnboarding } from "./screens/Onboarding";
 import { Home } from "./screens/Home";
@@ -44,6 +44,7 @@ function useApplySettings() {
 
 function Layout() {
   useShortcuts();
+  useAppBadge();
   return (
     <div data-fill className="fixed inset-0 grid grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] bg-bg md:grid-cols-[76px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,600px)_minmax(340px,420px)] xl:justify-center">
       <Rail />
@@ -68,12 +69,12 @@ function OpenLink() {
   return null;
 }
 
-/** Handle the PWA share target (?text=...&url=...) by opening the composer. */
+/** Handle the PWA share target (?text=...&url=...) and the "New note" icon shortcut (?compose) by opening the composer. */
 function useShareTarget() {
   useEffect(() => {
     const q = new URLSearchParams(location.search);
     const text = [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join("\n");
-    if (text) {
+    if (text || q.has("compose")) {
       history.replaceState(null, "", location.pathname + location.hash);
       setTimeout(() => openCompose({ text }), 300);
     }
@@ -99,7 +100,7 @@ export default function App() {
   }, [me]);
   const onboarding = useOnboarding();
   return (
-    <HashRouter>
+    <HashRouter useTransitions={false}>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Home />} />

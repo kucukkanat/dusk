@@ -28,6 +28,13 @@ export default defineConfig({
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
           { src: "icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
+        // long-press the home-screen icon (Android; iOS has no web shortcuts yet). Icons: scripts/shortcut-icons.mjs
+        shortcuts: [
+          { name: "New note", short_name: "New note", url: "./?compose=1", icons: [{ src: "icons/shortcuts/compose.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Search", short_name: "Search", url: "./#/search", icons: [{ src: "icons/shortcuts/search.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Messages", short_name: "Messages", url: "./#/messages", icons: [{ src: "icons/shortcuts/messages.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Activity", short_name: "Activity", url: "./#/activity", icons: [{ src: "icons/shortcuts/activity.png", sizes: "192x192", type: "image/png" }] },
+        ],
         share_target: { action: "./", method: "GET", params: { title: "title", text: "text", url: "url" } },
         protocol_handlers: [{ protocol: "web+nostr", url: "./#/open/%s" }],
       },

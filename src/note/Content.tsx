@@ -91,11 +91,11 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
     );
   return (
     <div className="mt-3 grid gap-1" onClick={(e) => e.stopPropagation()}>
-      {images.length === 1 && <Img url={images[0]} meta={meta.get(images[0])} ratio={ratio} onOpen={() => openLightbox(images, 0, images.map((u) => meta.get(u)?.alt))} />}
+      {images.length === 1 && <Img url={images[0]} meta={meta.get(images[0])} ratio={ratio} onOpen={(el) => openLightbox(images, 0, images.map((u) => meta.get(u)?.alt), el)} />}
       {images.length > 1 && (
         <div className={`grid gap-1 overflow-hidden rounded-[14px] ${images.length === 2 ? "grid-cols-2" : "grid-cols-2"}`}>
           {images.slice(0, 4).map((u, i) => (
-            <button key={u} type="button" className="relative aspect-square overflow-hidden bg-raised" onClick={() => openLightbox(images, i, images.map((x) => meta.get(x)?.alt))}>
+            <button key={u} type="button" className="relative aspect-square overflow-hidden bg-raised" onClick={(e) => openLightbox(images, i, images.map((x) => meta.get(x)?.alt), e.currentTarget)}>
               <img src={u} alt={meta.get(u)?.alt ?? ""} loading="lazy" className="size-full object-cover" />
               {i === 3 && images.length > 4 && <span className="absolute inset-0 grid place-items-center bg-black/50 text-xl font-semibold text-white">+{images.length - 4}</span>}
             </button>
@@ -113,7 +113,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
   );
 }
 
-function Img({ url, meta, ratio, onOpen }: { url: string; meta?: FileMetadataFields; ratio: number; onOpen: () => void }) {
+function Img({ url, meta, ratio, onOpen }: { url: string; meta?: FileMetadataFields; ratio: number; onOpen: (el: Element) => void }) {
   const [ok, setOk] = useState(true);
   const [done, setDone] = useState(false);
   const blur = useMemo(() => blurUrl(meta?.blurhash), [meta?.blurhash]);
@@ -124,7 +124,7 @@ function Img({ url, meta, ratio, onOpen }: { url: string; meta?: FileMetadataFie
       </a>
     );
   return (
-    <button type="button" onClick={onOpen} className="relative block w-full overflow-hidden rounded-[14px] bg-raised" style={meta?.dimensions ? { aspectRatio: `1 / ${ratio}` } : undefined}>
+    <button type="button" onClick={(e) => onOpen(e.currentTarget)} className="relative block w-full overflow-hidden rounded-[14px] bg-raised" style={meta?.dimensions ? { aspectRatio: `1 / ${ratio}` } : undefined}>
       {blur && !done && <img src={blur} alt="" className="absolute inset-0 size-full object-cover" />}
       <img src={url} alt={meta?.alt ?? ""} loading="lazy" decoding="async" onLoad={() => setDone(true)} onError={() => setOk(false)} className={`relative max-h-[75vh] w-full ${meta?.dimensions ? "h-full object-cover" : "object-contain"}`} />
       {meta?.alt && <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-1.5 text-[11px] font-semibold text-white">ALT</span>}
