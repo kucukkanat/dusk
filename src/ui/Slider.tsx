@@ -41,17 +41,24 @@ export function Slider({ container, selector, deps, className }: { container: Re
       setBox(target);
       return;
     }
-    // 1. stretch across both items
-    const x = Math.min(from.x, target.x);
-    const y = Math.min(from.y, target.y);
-    const union = { x, y, w: Math.max(from.x + from.w, target.x + target.w) - x, h: Math.max(from.y + from.h, target.y + target.h) - y };
-    // bulge sideways while travelling: wider on vertical moves, taller on horizontal ones
-    const dist = Math.hypot(target.x - from.x, target.y - from.y);
-    const bulge = Math.min(10, 3 + dist / 24);
-    if (Math.abs(target.y - from.y) >= Math.abs(target.x - from.x)) {
+    // 1. stretch a little toward the new item (capped, so long jumps don't make a tall blob)
+    //    and bulge sideways, wider on vertical moves and taller on horizontal ones
+    const dx = target.x - from.x;
+    const dy = target.y - from.y;
+    const vertical = Math.abs(dy) >= Math.abs(dx);
+    const union = { ...from };
+    if (vertical) {
+      const reach = Math.min(Math.abs(dy), from.h * 0.6);
+      if (dy < 0) union.y -= reach;
+      union.h += reach;
+      const bulge = Math.min(8, 3 + Math.abs(dy) / 30);
       union.x -= bulge;
       union.w += bulge * 2;
     } else {
+      const reach = Math.min(Math.abs(dx), from.w * 0.6);
+      if (dx < 0) union.x -= reach;
+      union.w += reach;
+      const bulge = Math.min(6, 2 + Math.abs(dx) / 40);
       union.y -= bulge / 2;
       union.h += bulge;
     }
