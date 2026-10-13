@@ -6,7 +6,12 @@ What Dusk does so the installed PWA feels like an app rather than a web page. �
 
 - **Web app manifest** (`vite.config.ts`, via `vite-plugin-pwa`): `display: standalone`, name/short name, `theme_color` and `background_color` set to the app background, 192/512 icons plus a **maskable** icon so Android can crop it.
 - **iOS home-screen meta** (`index.html`): `apple-mobile-web-app-capable`, `mobile-web-app-capable`, `apple-mobile-web-app-title`, `apple-touch-icon`.
-- **Status bar under the app**: `apple-mobile-web-app-status-bar-style: black-translucent` plus `viewport-fit=cover`, so content draws edge to edge and the app pads itself (see Safe areas).
+- ★ **Opaque iOS status bar**: `apple-mobile-web-app-status-bar-style: default`, so the app starts below the status bar, which takes its colour from `theme-color`. It used to be `black-translucent` (the app drew under the bar), but iOS 26 broke that for home-screen apps:
+  - it lays its Liquid Glass edge blur over the top ~110px, blurring the header, and the page can't measure that area;
+  - a WebKit bug makes the reported viewport height come up short by the top inset (~59pt), leaving a gap between the tab bar and the bottom edge.
+
+  Don't switch back to `black-translucent`. iOS reads this tag only when the app is added, so users must remove and re-add the app to pick up a change. The tag is iOS-only, so Android is unaffected; there the system draws a solid status bar coloured by `theme-color`.
+- **`viewport-fit=cover`** stays, so content can still run into notches and the home-indicator area and pad itself with `env(safe-area-inset-*)` (see Safe areas). With the opaque bar, the iOS top inset is 0.
 - ★ **Launch screens** (`scripts/splash.py` → `public/splash/`, links in `index.html`): `apple-touch-startup-image` for every current iPhone and iPad size, in dark and light variants selected with `prefers-color-scheme`. This replaces the white flash with the logo on the app background. Kept out of the service worker precache (`globIgnores: splash/**`).
 - **Share target**: the manifest `share_target` makes Dusk show up in the system share sheet; `useShareTarget` (`App.tsx`) opens the composer with the shared text or URL.
 - **Protocol handler**: `web+nostr:` links open in Dusk (`#/open/*`).
