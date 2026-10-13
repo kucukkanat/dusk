@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useSyncExternalStore } from "react";
 import { HashRouter, Routes, Route, Outlet, useNavigate, Navigate, useParams } from "react-router";
+import { useShallow } from "zustand/react/shallow";
 import { useSettings } from "./state/settings";
 import { useActivePubkey } from "./state/accounts";
 import { useSession } from "./nostr/session";
@@ -7,28 +8,59 @@ import { useNotificationFeed } from "./nostr/notifications";
 import { useDMFeed } from "./nostr/dms";
 import { loadWallet } from "./nostr/zaps";
 import { SheetHost, Toasts, Lightbox } from "./ui/Overlays";
+import { FeedSkeleton } from "./ui/primitives";
 import { dropLockedAccounts } from "./state/accounts";
 import { toast } from "./state/ui";
-import { openOnboarding } from "./screens/Onboarding";
 import { Rail, TabBar, useAppBadge } from "./ui/Nav";
 import { openCompose } from "./sheets/Compose";
-import { Onboarding, useOnboarding } from "./screens/Onboarding";
+import { openOnboarding, useOnboarding } from "./screens/Onboarding";
 import { Home } from "./screens/Home";
-import { Thread } from "./screens/Thread";
-import { Profile, Me } from "./screens/Profile";
-import { Activity } from "./screens/Activity";
-import { Messages, Chat } from "./screens/Messages";
-import { Search, Discover } from "./screens/Search";
-import { Tag } from "./screens/Tag";
-import { Address } from "./screens/Address";
-import { Settings } from "./screens/Settings";
-import { Identities } from "./screens/Identities";
-import { Bookmarks, Lists, Drafts } from "./screens/Lists";
 import { pathFor } from "./lib/links";
 import { openShortcuts, useShortcuts } from "./screens/Shortcuts";
 
+// Home is the first paint; every other screen loads on first visit (or on idle, see preload).
+const load = {
+  thread: () => import("./screens/Thread"),
+  profile: () => import("./screens/Profile"),
+  activity: () => import("./screens/Activity"),
+  messages: () => import("./screens/Messages"),
+  search: () => import("./screens/Search"),
+  tag: () => import("./screens/Tag"),
+  address: () => import("./screens/Address"),
+  settings: () => import("./screens/Settings"),
+  identities: () => import("./screens/Identities"),
+  lists: () => import("./screens/Lists"),
+  onboarding: () => import("./screens/Onboarding"),
+};
+const Thread = lazy(() => load.thread().then((m) => ({ default: m.Thread })));
+const Profile = lazy(() => load.profile().then((m) => ({ default: m.Profile })));
+const Me = lazy(() => load.profile().then((m) => ({ default: m.Me })));
+const Activity = lazy(() => load.activity().then((m) => ({ default: m.Activity })));
+const Messages = lazy(() => load.messages().then((m) => ({ default: m.Messages })));
+const Chat = lazy(() => load.messages().then((m) => ({ default: m.Chat })));
+const Search = lazy(() => load.search().then((m) => ({ default: m.Search })));
+const Discover = lazy(() => load.search().then((m) => ({ default: m.Discover })));
+const Tag = lazy(() => load.tag().then((m) => ({ default: m.Tag })));
+const Address = lazy(() => load.address().then((m) => ({ default: m.Address })));
+const Settings = lazy(() => load.settings().then((m) => ({ default: m.Settings })));
+const Identities = lazy(() => load.identities().then((m) => ({ default: m.Identities })));
+const Bookmarks = lazy(() => load.lists().then((m) => ({ default: m.Bookmarks })));
+const Lists = lazy(() => load.lists().then((m) => ({ default: m.Lists })));
+const Drafts = lazy(() => load.lists().then((m) => ({ default: m.Drafts })));
+const Onboarding = lazy(() => load.onboarding().then((m) => ({ default: m.Onboarding })));
+
+/** Fetch the screens a tap is likely to open once the app is idle, so a morph (flushSync inside a view transition) never lands on a suspended screen. */
+function usePreload() {
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1500));
+    idle(() => {
+      for (const f of [load.thread, load.profile, load.search, load.activity, load.messages]) f().catch(() => {});
+    });
+  }, []);
+}
+
 function useApplySettings() {
-  const s = useSettings();
+  const s = useSettings(useShallow((s) => ({ theme: s.theme, accent: s.accent, textSize: s.textSize, contrast: s.contrast, reduceMotion: s.reduceMotion })));
   useEffect(() => {
     const r = document.documentElement;
     if (s.theme === "auto") r.removeAttribute("data-theme");
@@ -42,17 +74,28 @@ function useApplySettings() {
   }, [s.theme, s.accent, s.textSize, s.contrast, s.reduceMotion]);
 }
 
+// the Discover column only shows at xl; don't load or run it on phones
+const wide = matchMedia("(min-width: 1100px)");
+const useWide = () => useSyncExternalStore((cb) => (wide.addEventListener("change", cb), () => wide.removeEventListener("change", cb)), () => wide.matches);
+
 function Layout() {
   useShortcuts();
   useAppBadge();
+  const showDiscover = useWide();
   return (
     <div data-fill className="fixed inset-0 grid grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] bg-bg md:grid-cols-[76px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,600px)_minmax(340px,420px)] xl:justify-center">
       <Rail />
       <main className="relative min-h-0 min-w-0 overflow-hidden md:border-r md:border-line">
-        <Outlet />
+        <Suspense fallback={<FeedSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
       <aside className="relative hidden min-h-0 min-w-0 overflow-hidden border-r border-line xl:block" aria-label="Discover">
-        <Discover />
+        {showDiscover && (
+          <Suspense fallback={null}>
+            <Discover />
+          </Suspense>
+        )}
       </aside>
       <TabBar />
     </div>
@@ -94,6 +137,7 @@ export default function App() {
   useNotificationFeed();
   useDMFeed();
   useShareTarget();
+  usePreload();
   const me = useActivePubkey();
   useEffect(() => {
     loadWallet(me);
@@ -126,7 +170,11 @@ export default function App() {
       <SheetHost />
       <Lightbox />
       <Toasts />
-      {onboarding && <Onboarding />}
+      {onboarding && (
+        <Suspense fallback={null}>
+          <Onboarding />
+        </Suspense>
+      )}
     </HashRouter>
   );
 }

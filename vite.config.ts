@@ -13,7 +13,6 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icons/*.png", "icons/icon.svg"],
       manifest: {
         name: "Dusk",
         short_name: "Dusk",
@@ -43,8 +42,31 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         globIgnores: ["**/hls-*.js", "splash/**"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // note images and avatars: served from the cache once seen, so scrolling back and relaunching don't refetch them
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.destination === "image",
+            handler: "CacheFirst",
+            options: { cacheName: "images", expiration: { maxEntries: 500, maxAgeSeconds: 7 * 24 * 60 * 60, purgeOnQuotaError: true }, cacheableResponse: { statuses: [0, 200] } },
+          },
+        ],
       },
     }),
   ],
-  build: { target: "es2022", chunkSizeWarningLimit: 1500 },
+  build: {
+    target: "es2022",
+    chunkSizeWarningLimit: 1500,
+    // libraries change far less often than the app: own chunks keep them cached across updates.
+    // Only libraries the first screen needs; lazy ones (qrcode, marked, hls, wallet connect) stay with their screens.
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/ },
+            { name: "nostr", test: /node_modules[\\/](applesauce-(core|relay|common|loaders|signers|actions|content|react)|nostr-tools|nostr-idb|idb|@noble|@scure[\\/]base|rxjs)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
 });
