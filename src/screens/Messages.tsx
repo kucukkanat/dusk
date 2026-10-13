@@ -188,7 +188,6 @@ export function Chat() {
   const convs = useConversations(follows);
   const conv = convs.find((c) => c.id === [...others].sort().join(","));
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -204,19 +203,16 @@ export function Chat() {
   if (!me) return <Messages />;
   if (!others.length) return <Empty title="Can't open this conversation" />;
 
-  const send = async () => {
+  // the bubble shows at once; delivery runs in the background (queued in order) and failures mark the bubble
+  const send = () => {
     const t = text.trim();
     if (!t) return;
     setText("");
-    setSending(true);
-    try {
-      await sendDM(others, t);
-      if (conv?.isRequest) acceptConversation(conv.id);
-    } catch (e) {
-      errorToast(e, "Not delivered");
-    } finally {
-      setSending(false);
-    }
+    const req = conv?.isRequest ? conv.id : null;
+    sendDM(others, t).then(
+      () => req && acceptConversation(req),
+      (e) => errorToast(e, "Not delivered"),
+    );
   };
   const sendFile = async (f?: File) => {
     if (!f) return;
@@ -278,7 +274,7 @@ export function Chat() {
             }}
             aria-label="Message"
           />
-          <button type="submit" className="grid size-11 flex-none place-items-center rounded-full bg-accent text-on-accent disabled:opacity-40" aria-label="Send" disabled={!text.trim() || sending}>
+          <button type="submit" className="grid size-11 flex-none place-items-center rounded-full bg-accent text-on-accent disabled:opacity-40" aria-label="Send" disabled={!text.trim()}>
             <Icon name="send" />
           </button>
         </form>
