@@ -34,7 +34,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: "index.html",
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        globIgnores: ["**/hls-*.js"],
+        globIgnores: ["**/hls-*.js", "splash/**"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),

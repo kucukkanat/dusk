@@ -100,11 +100,69 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     };
   }, [onRefresh]);
 
+  // swipe from the left edge to go back, like a native navigation stack
+  const sectionRef = useRef<HTMLElement>(null);
+  const backRef = useRef(goBack);
+  backRef.current = goBack;
+  // the same screen component can be reused for the previous route, so clear any leftover offset
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (el) (el.style.transform = ""), (el.style.transition = ""), (el.style.boxShadow = "");
+  }, [loc.key]);
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || !back) return;
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0;
+    let state: "idle" | "maybe" | "drag" = "idle";
+    const set = (x: number, animate: boolean) => {
+      el.style.transition = animate ? "transform 220ms var(--ease-calm)" : "none";
+      el.style.transform = x ? `translateX(${x}px)` : "";
+      el.style.boxShadow = x ? "-12px 0 32px rgba(0, 0, 0, 0.25)" : "";
+    };
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (e.touches.length !== 1 || t.clientX > 24) return;
+      x0 = t.clientX; y0 = t.clientY; t0 = e.timeStamp; dx = 0;
+      state = "maybe";
+    };
+    const move = (e: TouchEvent) => {
+      if (state === "idle") return;
+      const t = e.touches[0];
+      dx = Math.max(0, t.clientX - x0);
+      if (state === "maybe") {
+        if (Math.abs(t.clientY - y0) > 10) return void (state = "idle");
+        if (dx < 10) return;
+        state = "drag";
+      }
+      e.preventDefault();
+      set(dx, false);
+    };
+    const end = (e: TouchEvent) => {
+      if (state !== "drag") return void (state = "idle");
+      state = "idle";
+      const fast = dx / Math.max(1, e.timeStamp - t0) > 0.5;
+      if (dx > el.offsetWidth * 0.35 || (fast && dx > 40)) {
+        set(el.offsetWidth, true);
+        setTimeout(() => backRef.current(), 180);
+      } else set(0, true);
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [back]);
+
   // swipe the top bar sideways to switch feeds
   const tx = useRef<number | null>(null);
 
   return (
-    <section className="relative flex h-full min-h-0 flex-col bg-bg animate-fade" data-screen>
+    <section ref={sectionRef} className="relative flex h-full min-h-0 flex-col bg-bg animate-fade" data-screen>
       <header
         className={`flex min-h-14 flex-none items-center gap-2 bg-bg pt-[env(safe-area-inset-top)] pr-2 ${back ? "pl-1" : "pl-4"}`}
         onTouchStart={onTopbarSwipe ? (e) => (tx.current = e.touches[0].clientX) : undefined}

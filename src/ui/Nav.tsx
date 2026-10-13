@@ -75,6 +75,9 @@ function useOpenList() {
   };
 }
 
+/** Tapping the tab you're already on scrolls it back to the top, like native apps. */
+const scrollToTop = () => document.querySelector("main [data-scroller]")?.scrollTo({ top: 0, behavior: "smooth" });
+
 const fullOrder = (order: string[]) => [...order, ...Object.keys(NAV_ITEMS).filter((k) => !order.includes(k))].filter((k) => NAV_ITEMS[k]);
 
 export function Rail() {
@@ -109,7 +112,7 @@ export function Rail() {
           const it = NAV_ITEMS[id];
           const on = id === active;
           return (
-            <NavLink key={id} to={it.to} end={it.end} data-active={on} className={rowCls(on)} aria-label={it.label}>
+            <NavLink key={id} to={it.to} end={it.end} data-active={on} className={rowCls(on)} aria-label={it.label} onClick={() => on && loc.pathname === it.to && scrollToTop()}>
               <Icon name={it.icon} />
               <span className="hidden xl:inline">{it.label}</span>
               {dots[id] && <span className="absolute top-3 right-2.5 size-2 rounded-full bg-lilac-ink xl:right-auto xl:left-8" />}
@@ -178,7 +181,7 @@ export function TabBar() {
         const it = NAV_ITEMS[id];
         const on = id === active;
         return (
-          <NavLink key={id} to={it.to} end={it.end} data-active={on} className={tab(on)}>
+          <NavLink key={id} to={it.to} end={it.end} data-active={on} className={tab(on)} onClick={() => on && loc.pathname === it.to && scrollToTop()}>
             <span data-pill className={pill(on)}>
               <Icon name={it.icon} />
             </span>

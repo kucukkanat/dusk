@@ -104,6 +104,111 @@ export function Toasts() {
   );
 }
 
+type Pt = { x: number; y: number };
+type Touch = { clientX: number; clientY: number };
+const dist = (a: Touch, b: Touch) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+const mid = (a: Touch, b: Touch): Pt => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
+
+/** Photo with its own pinch / double-tap zoom and pan (page zoom is disabled). At normal size, swipe sideways to step, down to close. */
+function ZoomImage({ src, alt, onSwipe, onClose }: { src: string; alt: string; onSwipe: (d: number) => void; onClose: () => void }) {
+  const ref = useRef<HTMLImageElement>(null);
+  const v = useRef({ s: 1, x: 0, y: 0 });
+  const g = useRef({ kind: "", d0: 0, s0: 1, q: { x: 0, y: 0 }, start: { x: 0, y: 0 }, t0: { x: 0, y: 0 }, lastTap: 0 });
+
+  const apply = (animate: boolean) => {
+    const el = ref.current;
+    if (!el) return;
+    const { s, x, y } = v.current;
+    el.style.transition = animate ? "transform 220ms var(--ease-calm)" : "none";
+    el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+  };
+  const center = (): Pt => {
+    const r = ref.current!.parentElement!.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+  const clamp = () => {
+    const el = ref.current!;
+    const { s } = v.current;
+    const mx = Math.max(0, ((s - 1) * el.offsetWidth) / 2);
+    const my = Math.max(0, ((s - 1) * el.offsetHeight) / 2);
+    v.current.x = Math.max(-mx, Math.min(mx, v.current.x));
+    v.current.y = Math.max(-my, Math.min(my, v.current.y));
+  };
+  const zoomAt = (p: Pt, s: number) => {
+    const c = center();
+    const cur = v.current;
+    const q = { x: (p.x - c.x - cur.x) / cur.s, y: (p.y - c.y - cur.y) / cur.s };
+    v.current = { s, x: p.x - c.x - s * q.x, y: p.y - c.y - s * q.y };
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches;
+    const st = g.current;
+    if (t.length === 2) {
+      const c = center();
+      const m = mid(t[0], t[1]);
+      const cur = v.current;
+      Object.assign(st, { kind: "pinch", d0: dist(t[0], t[1]), s0: cur.s, q: { x: (m.x - c.x - cur.x) / cur.s, y: (m.y - c.y - cur.y) / cur.s } });
+    } else if (t.length === 1) {
+      const p = { x: t[0].clientX, y: t[0].clientY };
+      if (e.timeStamp - st.lastTap < 280) {
+        st.lastTap = 0;
+        st.kind = "";
+        if (v.current.s > 1) v.current = { s: 1, x: 0, y: 0 };
+        else zoomAt(p, 2.5), clamp();
+        return apply(true);
+      }
+      st.lastTap = e.timeStamp;
+      Object.assign(st, { kind: v.current.s > 1 ? "pan" : "swipe", start: p, t0: { x: v.current.x, y: v.current.y } });
+    }
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches;
+    const st = g.current;
+    if (st.kind === "pinch" && t.length === 2) {
+      const c = center();
+      const m = mid(t[0], t[1]);
+      const s = Math.max(0.8, Math.min(5, (st.s0 * dist(t[0], t[1])) / st.d0));
+      v.current = { s, x: m.x - c.x - s * st.q.x, y: m.y - c.y - s * st.q.y };
+      apply(false);
+    } else if (t.length === 1 && (st.kind === "pan" || st.kind === "swipe")) {
+      const dx = t[0].clientX - st.start.x;
+      const dy = t[0].clientY - st.start.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) st.lastTap = 0;
+      if (st.kind === "pan") v.current = { ...v.current, x: st.t0.x + dx, y: st.t0.y + dy };
+      else v.current = { s: 1, x: dx, y: Math.abs(dy) > Math.abs(dx) ? Math.max(0, dy) : 0 };
+      apply(false);
+    }
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const st = g.current;
+    if (e.touches.length > 0) return;
+    if (st.kind === "swipe") {
+      const { x, y } = v.current;
+      v.current = { s: 1, x: 0, y: 0 };
+      if (y > 120) return onClose();
+      if (Math.abs(x) > 60) onSwipe(x < 0 ? 1 : -1);
+    } else if (v.current.s <= 1.05) v.current = { s: 1, x: 0, y: 0 };
+    else clamp();
+    st.kind = "";
+    apply(true);
+  };
+
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      className="max-h-full max-w-full touch-none object-contain will-change-transform select-none"
+      onClick={(e) => e.stopPropagation()}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+    />
+  );
+}
+
 export function Lightbox() {
   const lb = useUI((s) => s.lightbox);
   const close = () => useUI.setState({ lightbox: null });
@@ -128,7 +233,7 @@ export function Lightbox() {
         </button>
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        <img src={lb.urls[lb.index]} alt={alt ?? ""} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+        <ZoomImage key={lb.urls[lb.index]} src={lb.urls[lb.index]} alt={alt ?? ""} onSwipe={step} onClose={close} />
         {lb.index > 0 && (
           <button type="button" className="iconbtn absolute left-2 bg-black/40 text-white" aria-label="Previous" onClick={(e) => (e.stopPropagation(), step(-1))}>
             <Icon name="back" />
