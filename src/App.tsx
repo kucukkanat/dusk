@@ -18,19 +18,35 @@ import { Home } from "./screens/Home";
 import { pathFor } from "./lib/links";
 import { openShortcuts, useShortcuts } from "./screens/Shortcuts";
 
+/** A screen file from an older build is gone after a deploy: reload once onto the new build. */
+export function reloadForNewBuild() {
+  try {
+    if (sessionStorage.getItem("dusk.reloaded") === location.href) return;
+    sessionStorage.setItem("dusk.reloaded", location.href);
+  } catch {
+    /* ignore */
+  }
+  location.reload();
+}
+const fresh = <T,>(f: () => Promise<T>) => () =>
+  f().catch((e) => {
+    reloadForNewBuild();
+    throw e;
+  });
+
 // Home is the first paint; every other screen loads on first visit (or on idle, see preload).
 const load = {
-  thread: () => import("./screens/Thread"),
-  profile: () => import("./screens/Profile"),
-  activity: () => import("./screens/Activity"),
-  messages: () => import("./screens/Messages"),
-  search: () => import("./screens/Search"),
-  tag: () => import("./screens/Tag"),
-  address: () => import("./screens/Address"),
-  settings: () => import("./screens/Settings"),
-  identities: () => import("./screens/Identities"),
-  lists: () => import("./screens/Lists"),
-  onboarding: () => import("./screens/Onboarding"),
+  thread: fresh(() => import("./screens/Thread")),
+  profile: fresh(() => import("./screens/Profile")),
+  activity: fresh(() => import("./screens/Activity")),
+  messages: fresh(() => import("./screens/Messages")),
+  search: fresh(() => import("./screens/Search")),
+  tag: fresh(() => import("./screens/Tag")),
+  address: fresh(() => import("./screens/Address")),
+  settings: fresh(() => import("./screens/Settings")),
+  identities: fresh(() => import("./screens/Identities")),
+  lists: fresh(() => import("./screens/Lists")),
+  onboarding: fresh(() => import("./screens/Onboarding")),
 };
 const Thread = lazy(() => load.thread().then((m) => ({ default: m.Thread })));
 const Profile = lazy(() => load.profile().then((m) => ({ default: m.Profile })));
