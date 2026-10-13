@@ -432,6 +432,11 @@ function Accessibility() {
 
 /* ---------- servers ---------- */
 
+function sameAsDefault(list: { url: string; read: boolean; write: boolean }[]) {
+  const d = uniqRelays(DEFAULT_RELAYS);
+  return list.length === d.length && list.every((r) => r.read && r.write && d.includes(r.url));
+}
+
 function useMyRelays() {
   const me = useActivePubkey();
   const ev = use$(() => (me ? eventStore.replaceable(10002, me) : undefined), [me]);
@@ -567,6 +572,11 @@ function Servers() {
               </button>
             </span>
           </Field>
+          {!sameAsDefault(list) && (
+            <button type="button" className="btn btn-ghost justify-start" onClick={() => (setDraft(DEFAULT_RELAYS.map((url) => ({ url, read: true, write: true }))), setErr(""))}>
+              Use just the {DEFAULT_RELAYS.length} popular servers
+            </button>
+          )}
           {dirty && (
             <div className="flex gap-2">
               <button type="button" className="btn btn-primary flex-1" disabled={busy} onClick={save}>
