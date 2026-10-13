@@ -42,23 +42,14 @@ export function Onboarding() {
   // how the new key is kept: a passkey (derived key, nothing to write down) or 12 seed words
   const [keep, setKeep] = useState<"choose" | "words">(passkeySupported() ? "choose" : "words");
   const [pk, setPk] = useState<{ sk: Uint8Array; credId: string } | null>(null);
-  const [pkPending, setPkPending] = useState<string | null>(null);
   const [pkErr, setPkErr] = useState("");
   const go = (s: Step) => useOnb.setState({ step: s });
   const usePasskey = async () => {
     setPkErr("");
     setBusy(true);
     try {
-      if (pkPending) {
-        setPk(await unlockPasskey(pkPending));
-        go("follows");
-      } else {
-        const r = await createPasskey(name.trim());
-        if (r.sk) {
-          setPk({ sk: r.sk, credId: r.credId });
-          go("follows");
-        } else setPkPending(r.credId); // this browser only hands out the key when the passkey is used
-      }
+      setPk(await createPasskey(name.trim()));
+      go("follows");
     } catch (e) {
       setPkErr((e as Error).message);
     } finally {
@@ -124,16 +115,14 @@ export function Onboarding() {
         <h1 className="text-[28px] leading-[34px] font-semibold">How should we keep your key?</h1>
         <p className="text-[16px] leading-6 text-muted">Your account is a key only you hold. Nobody, including Dusk, can reset it.</p>
         <div className="grid gap-2">
-          <Option icon="lock" title="Passkey" sub="Face ID, fingerprint or your device PIN. Syncs with your password manager, so it works on your other devices too." selected={!!pkPending} onClick={usePasskey} />
+          <Option icon="lock" title="Passkey" sub="Face ID, fingerprint or your device PIN. Your password manager keeps it and syncs it to your other devices." selected={false} onClick={usePasskey} />
           <Option icon="key" title="12 words" sub="Write them down and keep them somewhere safe. Works anywhere." selected={false} onClick={() => setKeep("words")} />
         </div>
-        {pkPending && (
-          <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={usePasskey}>
-            {busy ? "Waiting for passkey…" : "Finish with your passkey"}
-          </button>
-        )}
-        {busy && !pkPending && <p className="caption">Waiting for your passkey…</p>}
+        {busy && <p className="caption">Waiting for your passkey…</p>}
         {pkErr && <p className="text-[13px] text-clay-ink">{pkErr}</p>}
+        <button type="button" className="btn btn-ghost" onClick={() => go("signin")}>
+          I already have a key or signer
+        </button>
         <button type="button" className="btn btn-ghost" onClick={() => go("name")}>
           Back
         </button>

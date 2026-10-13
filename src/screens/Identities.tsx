@@ -105,11 +105,12 @@ export function openAddIdentity() {
 function AddIdentity() {
   return (
     <div className="grid gap-4">
-      <SignIn embedded onDone={() => closeSheet()} />
-      <div className="border-t border-line pt-3 text-center">
-        <button type="button" className="btn btn-ghost" onClick={() => (closeSheet(), openOnboarding("name", "add"))}>
-          Create a new identity instead
-        </button>
+      <button type="button" className="btn btn-primary btn-lg" onClick={() => (closeSheet(), openOnboarding("name", "add"))}>
+        <Icon name="plus" />
+        Create a new identity
+      </button>
+      <div className="border-t border-line pt-3">
+        <SignIn embedded onDone={() => closeSheet()} />
       </div>
     </div>
   );
@@ -134,14 +135,10 @@ export function Identities() {
           <Card key={a.pubkey} a={a} active={a.pubkey === active} />
         ))}
       </div>
-      <div className="grid gap-2 px-4">
-        <button type="button" className="btn btn-primary btn-lg" onClick={() => openOnboarding("name", "add")}>
-          <Icon name="plus" />
-          Create a new identity
-        </button>
+      <div className="px-4">
         <button type="button" className="btn btn-secondary btn-lg" onClick={openAddIdentity}>
-          <Icon name="key" />
-          Sign in to another
+          <Icon name="plus" />
+          Add identity
         </button>
       </div>
       <p className="px-4 pt-3 text-[13px] text-muted">Keys stay in your signer, your browser extension, your passkey, or in this browser. Dusk never uploads them.</p>
