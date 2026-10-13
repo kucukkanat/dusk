@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { useUI, closeSheet } from "../state/ui";
 import { Icon } from "./Icon";
-import { Avatar, Name } from "./primitives";
 
 /** Bottom sheets on phones, centred cards on wider screens. Drag the handle down to close. */
 export function SheetHost() {
@@ -83,7 +82,7 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
 export function Toasts() {
   const toasts = useUI((s) => s.toasts);
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:bottom-6" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom))] z-[70] flex flex-col items-center gap-2 px-4 md:bottom-6" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.id} className={`pointer-events-auto flex min-h-[52px] w-full max-w-[420px] items-center gap-3 rounded-[14px] border border-line bg-raised pr-2 pl-4 text-[15px] font-medium shadow-[var(--shadow-sheet)] animate-fade ${t.tone === "error" ? "text-clay-ink" : ""}`}>
           <span className="flex-1 py-3">{t.text}</span>
@@ -147,49 +146,6 @@ export function Lightbox() {
           {lb.urls.length > 1 && <div className="mt-1 text-white/50">{`${lb.index + 1} of ${lb.urls.length}`}</div>}
         </div>
       )}
-    </div>
-  );
-}
-
-export function UnlockPrompt() {
-  const req = useUI((s) => s.unlock);
-  const [pw, setPw] = useState("");
-  const [busy, setBusy] = useState(false);
-  if (!req) return null;
-  const done = (v: string | null) => {
-    useUI.setState({ unlock: null });
-    setPw("");
-    setBusy(false);
-    req.resolve(v);
-  };
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center md:items-center" role="dialog" aria-modal="true" aria-label="Unlock your key">
-      <div className="absolute inset-0 bg-scrim" onClick={() => done(null)} />
-      <form
-        className="relative grid w-full max-w-[420px] gap-4 rounded-t-[24px] bg-raised p-5 pb-[calc(20px+env(safe-area-inset-bottom))] md:rounded-[24px]"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setBusy(true);
-          setTimeout(() => done(pw), 10);
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <Avatar pubkey={req.pubkey} />
-          <div>
-            <h2 className="text-xl font-semibold">Unlock your key</h2>
-            <p className="caption">
-              <Name pubkey={req.pubkey} /> · one-time unlock; after this Dusk won't ask again
-            </p>
-          </div>
-        </div>
-        <input className="field" type="password" autoFocus autoComplete="current-password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} />
-        <button type="submit" className="btn btn-primary btn-lg" disabled={!pw || busy}>
-          {busy ? "Unlocking…" : "Unlock"}
-        </button>
-        <button type="button" className="btn btn-ghost" onClick={() => done(null)}>
-          Not now
-        </button>
-      </form>
     </div>
   );
 }

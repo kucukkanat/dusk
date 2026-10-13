@@ -8,7 +8,6 @@ type UIStore = {
   toasts: Toast[];
   sheets: Sheet[];
   lightbox: { urls: string[]; index: number; alts?: (string | undefined)[] } | null;
-  unlock: { pubkey: string; resolve: (pw: string | null) => void } | null;
   openSheet: (node: ReactNode, opts?: { label?: string; wide?: boolean }) => number;
   replaceSheet: (node: ReactNode) => void;
   closeSheet: (id?: number) => void;
@@ -21,7 +20,6 @@ export const useUI = create<UIStore>()((set) => ({
   toasts: [],
   sheets: [],
   lightbox: null,
-  unlock: null,
   openSheet: (node, opts) => {
     const id = seq++;
     set((s) => ({ sheets: [...s.sheets, { id, node, label: opts?.label, wide: opts?.wide }] }));
@@ -51,11 +49,6 @@ export const replaceSheet = (node: ReactNode) => useUI.getState().replaceSheet(n
 
 export function openLightbox(urls: string[], index = 0, alts?: (string | undefined)[]) {
   useUI.setState({ lightbox: { urls, index, alts } });
-}
-
-/** Ask the user for the password that unlocks a key stored on this device. */
-export function requestUnlock(pubkey: string): Promise<string | null> {
-  return new Promise((resolve) => useUI.setState({ unlock: { pubkey, resolve } }));
 }
 
 export async function copyText(text: string, msg = "Copied") {

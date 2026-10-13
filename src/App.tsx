@@ -6,7 +6,10 @@ import { useSession } from "./nostr/session";
 import { useNotificationFeed } from "./nostr/notifications";
 import { useDMFeed } from "./nostr/dms";
 import { loadWallet } from "./nostr/zaps";
-import { SheetHost, Toasts, Lightbox, UnlockPrompt } from "./ui/Overlays";
+import { SheetHost, Toasts, Lightbox } from "./ui/Overlays";
+import { dropLockedAccounts } from "./state/accounts";
+import { toast } from "./state/ui";
+import { openOnboarding } from "./screens/Onboarding";
 import { Rail, TabBar } from "./ui/Nav";
 import { openCompose } from "./sheets/Compose";
 import { Onboarding, useOnboarding } from "./screens/Onboarding";
@@ -79,6 +82,13 @@ function useShareTarget() {
 
 export default function App() {
   useApplySettings();
+  // keys saved with a password by older builds can't be opened any more: ask to sign in again
+  useEffect(() => {
+    if (dropLockedAccounts()) {
+      toast("Dusk no longer uses a password. Sign in again with your private key.", { ms: 8000 });
+      openOnboarding("signin");
+    }
+  }, []);
   useSession();
   useNotificationFeed();
   useDMFeed();
@@ -115,7 +125,6 @@ export default function App() {
       <SheetHost />
       <Lightbox />
       <Toasts />
-      <UnlockPrompt />
       {onboarding && <Onboarding />}
     </HashRouter>
   );

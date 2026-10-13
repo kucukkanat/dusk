@@ -3,9 +3,8 @@ import { persist } from "zustand/middleware";
 import type { EventTemplate, NostrEvent } from "applesauce-core/helpers/event";
 import { ExtensionSigner, NostrConnectSigner, PrivateKeySigner } from "applesauce-signers";
 import type { ISigner } from "applesauce-signers";
-import { decrypt as nip49decrypt, encrypt as nip49encrypt } from "nostr-tools/nip49";
-import { requestUnlock } from "./ui";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { encrypt as nip49encrypt } from "nostr-tools/nip49";
+import { hexToBytes } from "@noble/hashes/utils.js";
 
 export type AccountType = "extension" | "bunker" | "key";
 export type Account = {
@@ -15,7 +14,7 @@ export type Account = {
   nbunksec?: string;
   /** Hex private key kept on this device */
   secret?: string;
-  /** Older accounts: NIP-49 encrypted key, converted to `secret` on first unlock */
+  /** Older builds stored a password-protected key here; those accounts must sign in again */
   ncryptsec?: string;
   added: number;
 };
@@ -78,23 +77,20 @@ async function buildSigner(a: Account): Promise<ISigner> {
     return NostrConnectSigner.fromNbunksec(a.nbunksec);
   }
   if (a.secret) return new PrivateKeySigner(hexToBytes(a.secret));
-  if (!a.ncryptsec) throw new Error("Missing key");
-  for (let tries = 0; tries < 3; tries++) {
-    const pw = await requestUnlock(a.pubkey);
-    if (pw == null) throw new Error("Locked");
-    try {
-      const sk = nip49decrypt(a.ncryptsec, pw);
-      // one-time migration: keep the key without a password from now on
-      useAccounts.setState((s) => ({ accounts: s.accounts.map((x) => (x.pubkey === a.pubkey ? { ...x, secret: bytesToHex(sk), ncryptsec: undefined } : x)) }));
-      return new PrivateKeySigner(sk);
-    } catch {
-      /* wrong password; ask again */
-    }
-  }
-  throw new Error("Wrong password");
+  throw new Error("Sign in again with your private key")
 }
 
-/** Get (and lazily unlock or connect) the signer for an account. */
+/**
+ * Accounts saved by older builds with a password-protected key can't be opened without that password,
+ * and Dusk no longer asks for one. Remove them so the person can sign in again with their key.
+ */
+export function dropLockedAccounts(): number {
+  const locked = useAccounts.getState().accounts.filter((a) => a.type === "key" && !a.secret);
+  for (const a of locked) useAccounts.getState().remove(a.pubkey);
+  return locked.length;
+}
+
+/** Get (and lazily connect) the signer for an account. */
 export async function getSigner(pubkey = getActivePubkey()): Promise<ISigner> {
   if (!pubkey) throw new Error("Sign in first");
   const ready = signers.get(pubkey);
