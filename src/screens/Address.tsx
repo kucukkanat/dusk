@@ -10,7 +10,7 @@ import { getRSVPStatus } from "applesauce-common/helpers/calendar-rsvp";
 import { getBadgeName, getBadgeDescription, getBadgeImage } from "applesauce-common/helpers/badge";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS, pool, now } from "../nostr/core";
+import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS, pool, quick$, now } from "../nostr/core";
 import { requestAll } from "../nostr/timeline";
 import { outboxesOf } from "../nostr/relays";
 import { publish } from "../nostr/publish";
@@ -41,8 +41,14 @@ export function Address() {
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     if (!pointer) return;
-    // ask the author's own relays too
-    outboxesOf(pointer.pubkey, 2000).then((r) => requestAll(uniqRelays(r, pointer.relays ?? [], readRelays$.value), [{ kinds: [pointer.kind], authors: [pointer.pubkey], "#d": [pointer.identifier] }], 6000));
+    // start on the hinted and read relays, then ask the author's own relays too
+    const f = [{ kinds: [pointer.kind], authors: [pointer.pubkey], "#d": [pointer.identifier] }];
+    const base = uniqRelays(pointer.relays ?? [], readRelays$.value);
+    requestAll(base, f, 6000);
+    outboxesOf(pointer.pubkey, 2000).then((r) => {
+      const extra = uniqRelays(r).filter((x) => !base.includes(x));
+      if (extra.length && !eventStore.hasReplaceable(pointer.kind, pointer.pubkey, pointer.identifier)) requestAll(extra, f, 6000);
+    });
     const t = setTimeout(() => setTimedOut(true), 9000);
     return () => clearTimeout(t);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -207,7 +213,7 @@ function Live({ event }: { event: NostrEvent }) {
   const relays = useMemo(() => uniqRelays(getStreamRelays(event) ?? [], readRelays$.value).slice(0, 6), [event]);
   const [text, setText] = useState("");
   useEffect(() => {
-    const req = pool.request(relays, { kinds: [1311, 9735], "#a": [addr], limit: 200 }, { eventStore, timeout: 6000 } as never).subscribe({ next: (e) => eventStore.add(e), error: () => {} });
+    const req = quick$(relays, { kinds: [1311, 9735], "#a": [addr], limit: 200 }, { settle: 1200, cap: 6000 }).subscribe({ error: () => {} });
     const live = pool.subscription(relays, { kinds: [1311, 9735], "#a": [addr], since: now() }).subscribe({ next: (e) => eventStore.add(e), error: () => {} });
     return () => (req.unsubscribe(), live.unsubscribe());
   }, [addr, relays]);

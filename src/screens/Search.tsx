@@ -58,7 +58,16 @@ function useSuggestions(limit = 6) {
   const [list, setList] = useState<string[]>([]);
   useEffect(() => {
     if (!me) return;
-    friendsOfFriends(me, 40).then((l) => setList(l));
+    let alive = true;
+    // suggestions are below the fold; let the screen paint and settle first
+    const run = () => friendsOfFriends(me, 40).then((l) => alive && setList(l));
+    const ric = (window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    const h = ric ? ric(run, { timeout: 4000 }) : setTimeout(run, 1500);
+    return () => {
+      alive = false;
+      if (ric) (window as unknown as { cancelIdleCallback: (h: number) => void }).cancelIdleCallback(h as number);
+      else clearTimeout(h as ReturnType<typeof setTimeout>);
+    };
   }, [me]);
   return list.filter((p) => !follows.has(p)).slice(0, limit);
 }
@@ -94,20 +103,33 @@ function Results({ q }: { q: string }) {
     setPeople(searchLocalProfiles(query, 8));
     setNotes([]);
     setLoading(true);
-    const t = setTimeout(async () => {
-      if (isNip05) {
-        const r = await queryProfile(query).catch(() => null);
-        if (alive && r) setPeople((p) => [r.pubkey, ...p.filter((x) => x !== r.pubkey)]);
-      }
+    const t = setTimeout(() => {
+      if (isNip05)
+        queryProfile(query)
+          .catch(() => null)
+          .then((r) => alive && r && setPeople((p) => [r.pubkey, ...p.filter((x) => x !== r.pubkey)]));
       if (isTag) {
         setLoading(false);
         return;
       }
-      const [profiles, found] = await Promise.all([searchRelays(query, [0], 20), searchRelays(query, [1, 20, 1068, 30023], 40)]);
-      if (!alive) return;
-      setPeople((p) => [...new Set([...p, ...profiles.map((e) => e.pubkey)])].slice(0, 12));
-      setNotes(found.sort((a, b) => b.created_at - a.created_at));
-      setLoading(false);
+      // stream results in as relays answer, a frame's worth at a time
+      const pp: string[] = [];
+      const nn: NostrEvent[] = [];
+      let flush: ReturnType<typeof setTimeout> | undefined;
+      const flushNow = () => {
+        clearTimeout(flush);
+        flush = undefined;
+        if (!alive) return;
+        const p = pp.splice(0);
+        const n = nn.splice(0);
+        if (p.length) setPeople((x) => [...new Set([...x, ...p])].slice(0, 12));
+        if (n.length) setNotes((x) => [...x, ...n.filter((e) => !x.some((y) => y.id === e.id))].sort((a, b) => b.created_at - a.created_at));
+      };
+      const later = () => (flush ??= setTimeout(flushNow, 120));
+      Promise.all([
+        searchRelays(query, [0], 20, (e) => (pp.push(e.pubkey), later())),
+        searchRelays(query, [1, 20, 1068, 30023], 40, (e) => (nn.push(e), later())),
+      ]).then(() => (flushNow(), alive && setLoading(false)));
     }, 350);
     return () => {
       alive = false;

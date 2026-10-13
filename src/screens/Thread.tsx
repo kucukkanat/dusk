@@ -4,9 +4,9 @@ import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import type { EventPointer } from "applesauce-core/helpers/pointers";
 import { getNip10References } from "applesauce-common/helpers/threading";
-import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "../nostr/core";
-import { inboxesOf, outboxesOf } from "../nostr/relays";
-import { requestAll } from "../nostr/timeline";
+import type { Filter } from "applesauce-core/helpers/filter";
+import { eventStore, quick, readRelays$, uniqRelays, DEFAULT_RELAYS } from "../nostr/core";
+import { loadMailboxes } from "../nostr/relays";
 import { useWot } from "../nostr/wot";
 import { useActivePubkey } from "../state/accounts";
 import { decodeAny, isAddressable } from "../lib/links";
@@ -20,6 +20,8 @@ import { openNoteMenu } from "../sheets/NoteMenu";
 import { requireSignIn } from "../note/actions";
 import { displayName } from "../nostr/profile";
 import { plural } from "../lib/format";
+
+const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))];
 
 function parentPointer(e: NostrEvent): EventPointer | undefined {
   if (e.kind === 1111) {
@@ -105,12 +107,20 @@ function ThreadBody({ event }: { event: NostrEvent }) {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const [inbox, outbox] = await Promise.all([inboxesOf(event.pubkey, 1500), outboxesOf(event.pubkey, 1500)]);
-      const relays = uniqRelays(inbox, outbox, readRelays$.value, DEFAULT_RELAYS).slice(0, 10);
-      await requestAll(relays, [{ kinds: [1, 1111], "#e": [event.id], limit: 500 }], 6000);
-      if (alive) setLoading(false);
-    })();
+    const done = () => alive && setLoading(false);
+    // the whole thread hangs off its root: one request brings the parent chain and the replies together
+    const refs = event.kind === 1 ? getNip10References(event) : {};
+    const ids = [refs.root?.e?.id, refs.reply?.e?.id].filter((x): x is string => !!x && !eventStore.hasEvent(x));
+    const filters: Filter[] = [{ kinds: [1, 1111], "#e": uniq([refs.root?.e?.id, event.id]), limit: 500 }];
+    if (ids.length) filters.push({ ids });
+    const base = uniqRelays(readRelays$.value, DEFAULT_RELAYS);
+    quick(base, filters, { settle: 1200, cap: 6000 }).then(done);
+    // then the author's relays, once known
+    loadMailboxes(event.pubkey, 2500).then((m) => {
+      if (!alive || !m) return;
+      const extra = uniqRelays(m.inboxes.slice(0, 4), m.outboxes.slice(0, 4)).filter((r) => !base.includes(r));
+      if (extra.length) quick(extra, filters, { settle: 1200, cap: 6000 }).then(done);
+    });
     return () => {
       alive = false;
     };

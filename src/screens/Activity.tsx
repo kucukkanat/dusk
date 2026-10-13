@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
-import { useNotifications, useNotifRead, rememberFollowers, type Notif } from "../nostr/notifications";
+import { useNotifications, useNotifRead, useNotifLoading, rememberFollowers, type Notif } from "../nostr/notifications";
 import { eventStore } from "../nostr/core";
 import { useActivePubkey } from "../state/accounts";
 import { useMyMutes, setMute } from "../nostr/lists";
@@ -11,7 +11,7 @@ import { profilePath, eventPath } from "../lib/links";
 import { ago, sats } from "../lib/format";
 import { toast } from "../state/ui";
 import { Screen, Chips } from "../ui/Screen";
-import { Empty, Endcap, Avatar } from "../ui/primitives";
+import { Empty, Endcap, Avatar, FeedSkeleton } from "../ui/primitives";
 import { SwipeRow } from "../ui/SwipeRow";
 import { Icon, type IconName } from "../ui/Icon";
 import { openOnboarding } from "./Onboarding";
@@ -93,6 +93,7 @@ export function Activity() {
   const mutes = useMyMutes();
   const wot = useWot();
   const markAll = useNotifRead((s) => s.markAll);
+  const loading = useNotifLoading((s) => s.loading);
   const [f, setF] = useState<Filter>("all");
   const [showStrangers, setShowStrangers] = useState(false);
 
@@ -165,8 +166,21 @@ export function Activity() {
               </button>
             </div>
           )}
-          <Endcap>That's everything from the last two weeks</Endcap>
+          {loading ? <FeedSkeleton count={2} label="Loading activity" /> : <Endcap>That's everything from the last two weeks</Endcap>}
         </>
+      ) : loading ? (
+        <FeedSkeleton label="Loading activity" />
+      ) : hidden > 0 ? (
+        <Empty
+          title="All quiet from your network"
+          action={
+            <button type="button" className="btn btn-secondary" onClick={() => setShowStrangers(true)}>
+              Show {hidden} {hidden === 1 ? "other" : "others"}
+            </button>
+          }
+        >
+          Nothing from people you follow or their friends yet.
+        </Empty>
       ) : (
         <Empty title="All quiet">Mentions, replies and zaps will show up here.</Empty>
       )}

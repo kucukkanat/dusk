@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import { getInboxes, getOutboxes } from "applesauce-core/helpers/mailboxes";
@@ -519,13 +519,12 @@ function Servers() {
     if (!draft.some((r) => r.write) || !draft.some((r) => r.read)) return setErr("Keep at least one server to read from and one to write to.");
     setBusy(true);
     try {
-      await ensureLatest(10002);
+      const added = draft.map((r) => r.url).filter((u) => !current.some((c) => c.url === u));
+      const [, dm] = await Promise.all([ensureLatest(10002), added.length ? ensureLatest(10050) : undefined]);
       const tags = draft.map((r) => (r.read && r.write ? ["r", r.url] : ["r", r.url, r.read ? "read" : "write"]));
       // publish to old and new relays plus the indexers so everyone finds the new list
       await publish({ kind: 10002, tags }, { relays: uniqRelays(draft.map((r) => r.url), LOOKUP_RELAYS), notifyTagged: false });
       // new servers become message servers too, so DMs reach you wherever you read
-      const added = draft.map((r) => r.url).filter((u) => !current.some((c) => c.url === u));
-      const dm = added.length ? await ensureLatest(10050) : undefined;
       if (dm && added.length) {
         const have = dm.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
         await publish({ kind: 10050, tags: uniqRelays(have, added).map((u) => ["relay", u]) }, { notifyTagged: false });
@@ -601,20 +600,27 @@ function ListEditor({ kind, tag, title, help, suggestions, fallback = [] }: { ki
   const saved = useMemo(() => (ev ? (kind === 10063 ? getBlossomServersFromList(ev).map((u) => u.toString().replace(/\/$/, "")) : ev.tags.filter((t) => t[0] === tag).map((t) => t[1])) : []), [ev, kind, tag]);
   // with no list of their own, people use the fallback (e.g. all their servers); edits start from it
   const usingFallback = !saved.length && fallback.length > 0;
-  const current = usingFallback ? fallback : saved;
+  // edits show at once; the pending list wins until the store catches up (or the save fails)
+  const [pending, setPending] = useState<string[] | null>(null);
+  useEffect(() => setPending((p) => (p && [...p].sort().join() === [...saved].sort().join() ? null : p)), [saved]);
+  const current = pending ?? (usingFallback ? fallback : saved);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const save = async (next: string[]) => {
-    setBusy(true);
-    try {
-      await ensureLatest(kind);
-      await publish({ kind, tags: [...new Set(next)].map((u) => [tag, u]) }, { notifyTagged: false });
-      toast("Saved");
-    } catch (e) {
-      errorToast(e, "Couldn't save");
-    } finally {
-      setBusy(false);
-    }
+  const queue = useRef<{ p: Promise<unknown>; t: number }>({ p: Promise.resolve(), t: 0 });
+  const save = (next: string[]) => {
+    const list = [...new Set(next)];
+    setPending(list);
+    const q = queue.current;
+    // one save at a time, each newer than the last so a quick second tap can't lose to the first
+    q.p = q.p.then(async () => {
+      try {
+        await ensureLatest(kind);
+        q.t = Math.max(Math.floor(Date.now() / 1000), q.t + 1);
+        await publish({ kind, created_at: q.t, tags: list.map((u) => [tag, u]) }, { notifyTagged: false });
+      } catch (e) {
+        setPending(null);
+        errorToast(e, "Couldn't save");
+      }
+    });
   };
   const valid = (v: string) => (tag === "relay" ? normalizeRelay(v) : /^https:\/\/\S+$/.test(v) ? v.replace(/\/$/, "") : null);
   const norm = (u: string) => (tag === "relay" ? (normalizeRelay(u) ?? u) : u.replace(/\/$/, ""));
@@ -627,7 +633,7 @@ function ListEditor({ kind, tag, title, help, suggestions, fallback = [] }: { ki
         {current.map((u) => (
           <div key={u} className="flex items-center gap-2 px-4 py-3">
             <span className="key min-w-0 flex-1 text-ink">{u}</span>
-            <button type="button" className="iconbtn" aria-label={`Remove ${u}`} disabled={busy || current.length < 2} onClick={() => save(current.filter((x) => x !== u))}>
+            <button type="button" className="iconbtn" aria-label={`Remove ${u}`} disabled={current.length < 2} onClick={() => save(current.filter((x) => x !== u))}>
               <Icon name="trash" />
             </button>
           </div>
@@ -638,7 +644,7 @@ function ListEditor({ kind, tag, title, help, suggestions, fallback = [] }: { ki
         <Group label="Add with one tap">
           <div className="flex flex-wrap gap-2 px-4 py-3">
             {offer.map((d) => (
-              <button key={d} type="button" className="chip text-[13px]" disabled={busy} onClick={() => save([...current, d])}>
+              <button key={d} type="button" className="chip text-[13px]" onClick={() => save([...current, d])}>
                 <Icon name="plus" size={16} />
                 {d.replace(/^wss?:\/\/|^https:\/\//, "")}
               </button>
@@ -657,7 +663,7 @@ function ListEditor({ kind, tag, title, help, suggestions, fallback = [] }: { ki
         }}
       >
         <input className="field key" placeholder={tag === "relay" ? "wss://…" : "https://…"} value={input} onChange={(e) => setInput(e.target.value)} />
-        <button type="submit" className="btn btn-secondary" disabled={busy}>
+        <button type="submit" className="btn btn-secondary">
           Add
         </button>
       </form>

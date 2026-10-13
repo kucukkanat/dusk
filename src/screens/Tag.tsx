@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useSettings } from "../state/settings";
 import { hashtagSpec } from "../nostr/feeds";
@@ -21,15 +21,17 @@ export function Tag() {
   const spec = useMemo(() => hashtagSpec(tag), [tag]);
   const { events, loading, loadedOnce, done, timeline } = useTimeline(spec);
   const mutes = useMyMutes();
-  const visible = events.filter((e) => !isMuted(e, mutes));
+  const visible = useMemo(() => events.filter((e) => !isMuted(e, mutes)), [events, mutes]);
+  const onEnd = useCallback(() => timeline?.loadMore(), [timeline]);
+  const onRefresh = useCallback(() => timeline?.refresh(), [timeline]);
   const mutedTag = mutes.hashtags.has(tag);
   return (
     <Screen
       back
       title={"#" + tag}
       fab
-      onEnd={() => timeline?.loadMore()}
-      onRefresh={() => timeline?.refresh()}
+      onEnd={onEnd}
+      onRefresh={onRefresh}
       actions={
         <>
           {saved ? (

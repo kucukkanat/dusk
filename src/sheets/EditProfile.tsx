@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { publish } from "../nostr/publish";
 import { ensureLatest } from "../nostr/actions";
+import { eventStore } from "../nostr/core";
+import type { NostrEvent } from "applesauce-core/helpers/event";
 import { uploadFile } from "../nostr/upload";
 import { useActivePubkey } from "../state/accounts";
 import { openSheet, closeSheet, toast, errorToast } from "../state/ui";
@@ -11,28 +13,39 @@ export function openEditProfile() {
   openSheet(<EditProfile />, { label: "Edit profile", wide: true });
 }
 
+function parse(ev?: NostrEvent): P | null {
+  if (!ev) return null;
+  try {
+    return JSON.parse(ev.content);
+  } catch {
+    return {};
+  }
+}
+
 type P = { name?: string; display_name?: string; about?: string; picture?: string; banner?: string; website?: string; nip05?: string; lud16?: string; [k: string]: unknown };
 
 function EditProfile() {
   const me = useActivePubkey()!;
-  const [base, setBase] = useState<P | null>(null);
-  const [p, setP] = useState<P>({});
+  // start from the copy we hold; the latest from relays is fetched quietly and merged in at save time
+  const [base, setBase] = useState<P | null>(() => parse(eventStore.getReplaceable(0, me)));
+  const [p, setP] = useState<P>(() => base ?? {});
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<"picture" | "banner" | null>(null);
   const pic = useRef<HTMLInputElement>(null);
   const ban = useRef<HTMLInputElement>(null);
+  const latest = useRef<Promise<P | null>>(null);
 
   useEffect(() => {
-    ensureLatest(0, me).then((ev) => {
-      let c: P = {};
-      try {
-        c = ev ? JSON.parse(ev.content) : {};
-      } catch {
-        /* bad json */
-      }
-      setBase(c);
-      setP(c);
-    });
+    const had = !!eventStore.getReplaceable(0, me);
+    latest.current = ensureLatest(0, me).then(
+      (ev) => parse(ev),
+      () => null,
+    );
+    if (!had)
+      latest.current.then((c) => {
+        setBase(c ?? {});
+        setP(c ?? {});
+      });
   }, [me]);
 
   const upload = async (field: "picture" | "banner", f?: File) => {
@@ -51,7 +64,8 @@ function EditProfile() {
   const save = async () => {
     setBusy(true);
     try {
-      const content = { ...(base ?? {}), ...p };
+      const edits = Object.fromEntries(Object.entries(p).filter(([k, v]) => v !== base?.[k]));
+      const content: P = { ...((await latest.current) ?? base ?? {}), ...edits };
       if (content.display_name && !content.name) content.name = content.display_name;
       for (const k of Object.keys(content)) if (content[k] === "") delete content[k];
       await publish({ kind: 0, content: JSON.stringify(content) });

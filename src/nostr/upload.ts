@@ -39,23 +39,10 @@ async function imageInfo(file: Blob): Promise<{ dim?: string; blurhash?: string 
   }
 }
 
-/** Upload a file to a Blossom server (BUD-02) with a signed authorization event. */
-export async function uploadFile(file: Blob, onProgress?: (p: number) => void, server = mediaServers()[0]): Promise<Uploaded> {
-  if (!server) throw new Error("Choose a media server in Settings");
-  const buf = await file.arrayBuffer();
-  const sha256 = await sha256Hex(buf);
-  const auth = await signEvent({
-    kind: 24242,
-    created_at: now(),
-    content: "Upload " + ((file as File).name || "file"),
-    tags: [
-      ["t", "upload"],
-      ["x", sha256],
-      ["expiration", String(now() + 600)],
-    ],
-  });
-  const info = await imageInfo(file);
-  const res = await new Promise<{ url: string; sha256?: string; size?: number; type?: string }>((resolve, reject) => {
+class RetryableError extends Error {}
+
+function put(server: string, file: Blob, auth: unknown, onProgress?: (p: number) => void) {
+  return new Promise<{ url: string; sha256?: string; size?: number; type?: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", server + "/upload");
     xhr.setRequestHeader("Authorization", "Nostr " + btoa(JSON.stringify(auth)));
@@ -68,12 +55,44 @@ export async function uploadFile(file: Blob, onProgress?: (p: number) => void, s
         } catch {
           reject(new Error("The media server sent an unexpected answer"));
         }
-      } else reject(new Error(xhr.getResponseHeader("X-Reason") || `Upload failed (${xhr.status})`));
+      } else {
+        const msg = xhr.getResponseHeader("X-Reason") || `Upload failed (${xhr.status})`;
+        reject(xhr.status >= 500 ? new RetryableError(msg) : new Error(msg));
+      }
     };
-    xhr.onerror = () => reject(new Error("Couldn't reach the media server"));
+    xhr.onerror = () => reject(new RetryableError("Couldn't reach the media server"));
     xhr.send(file);
   });
-  return { url: res.url, sha256: res.sha256 ?? sha256, size: res.size ?? file.size, type: res.type || file.type, ...info };
+}
+
+/** Upload a file to a Blossom server (BUD-02) with a signed authorization event. Tries the next server once if this one is down. */
+export async function uploadFile(file: Blob, onProgress?: (p: number) => void, server = mediaServers()[0]): Promise<Uploaded> {
+  if (!server) throw new Error("Choose a media server in Settings");
+  // dimensions and blurhash are worked out while we sign and upload
+  const info = imageInfo(file);
+  const buf = await file.arrayBuffer();
+  const sha256 = await sha256Hex(buf);
+  const auth = await signEvent({
+    kind: 24242,
+    created_at: now(),
+    content: "Upload " + ((file as File).name || "file"),
+    tags: [
+      ["t", "upload"],
+      ["x", sha256],
+      ["expiration", String(now() + 600)],
+    ],
+  });
+  let res;
+  try {
+    res = await put(server, file, auth, onProgress);
+  } catch (e) {
+    const servers = mediaServers();
+    const next = servers[servers.indexOf(server) + 1] ?? (servers[0] !== server ? servers[0] : undefined);
+    if (!(e instanceof RetryableError) || !next) throw e;
+    onProgress?.(0);
+    res = await put(next, file, auth, onProgress);
+  }
+  return { url: res.url, sha256: res.sha256 ?? sha256, size: res.size ?? file.size, type: res.type || file.type, ...(await info) };
 }
 
 export function imetaTag(u: Uploaded): string[] {
@@ -91,9 +110,8 @@ export async function uploadEncrypted(file: File, onProgress?: (p: number) => vo
   const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
   const plain = await file.arrayBuffer();
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, k, plain);
-  const info = await imageInfo(file);
   const blob = new Blob([ct], { type: "application/octet-stream" });
-  const up = await uploadFile(blob, onProgress);
+  const [info, up] = await Promise.all([imageInfo(file), uploadFile(blob, onProgress)]);
   const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
   const tags = [
     ["file-type", file.type || "application/octet-stream"],

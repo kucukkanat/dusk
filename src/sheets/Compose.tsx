@@ -40,6 +40,20 @@ export function openCompose(o: { replyTo?: NostrEvent; quote?: NostrEvent; text?
   openSheet(<Compose {...o} />, { label: o.replyTo ? "Reply" : "New note", wide: true });
 }
 
+/** At most three uploads at once so a batch of photos doesn't starve each other (or the server). */
+let active = 0;
+const waiting: (() => void)[] = [];
+function limit<T>(fn: () => Promise<T>): Promise<T> {
+  const run = () => {
+    active++;
+    return fn().finally(() => {
+      active--;
+      waiting.shift()?.();
+    });
+  };
+  return active < 3 ? run() : new Promise<void>((r) => waiting.push(r)).then(run);
+}
+
 type Attachment = { id: string; file: File; preview: string; progress: number; uploaded?: Uploaded; error?: string; alt: string };
 
 function MentionChip({ pubkey, onPick }: { pubkey: string; onPick: (pk: string, name: string) => void }) {
@@ -55,7 +69,7 @@ function MentionChip({ pubkey, onPick }: { pubkey: string; onPick: (pk: string, 
 
 function Compose({ replyTo, quote, text: initial, draft }: { replyTo?: NostrEvent; quote?: NostrEvent; text?: string; draft?: Draft }) {
   const me = useActivePubkey();
-  const settings = useSettings();
+  const altReminder = useSettings((s) => s.altReminder);
   const [text, setText] = useState(draft?.text ?? initial ?? "");
   const [mentions, setMentions] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Attachment[]>([]);
@@ -111,7 +125,7 @@ function Compose({ replyTo, quote, text: initial, draft }: { replyTo?: NostrEven
     const next = arr.map((file) => ({ id: Math.random().toString(36).slice(2), file, preview: URL.createObjectURL(file), progress: 0, alt: "" }));
     setFiles((f) => [...f, ...next]);
     for (const a of next)
-      uploadFile(a.file, (p) => setFiles((fs) => fs.map((x) => (x.id === a.id ? { ...x, progress: p } : x))))
+      limit(() => uploadFile(a.file, (p) => setFiles((fs) => fs.map((x) => (x.id === a.id ? { ...x, progress: p } : x)))))
         .then((u) => setFiles((fs) => fs.map((x) => (x.id === a.id ? { ...x, uploaded: u, progress: 1 } : x))))
         .catch((e) => setFiles((fs) => fs.map((x) => (x.id === a.id ? { ...x, error: (e as Error).message } : x))));
   };
@@ -123,7 +137,7 @@ function Compose({ replyTo, quote, text: initial, draft }: { replyTo?: NostrEven
   const post = async () => {
     if (!canPost) return;
     const missingAlt = files.some((f) => f.uploaded && f.file.type.startsWith("image/") && !f.alt.trim());
-    if (settings.altReminder && missingAlt && !confirm("Some photos have no description. Post anyway?")) return;
+    if (altReminder && missingAlt && !confirm("Some photos have no description. Post anyway?")) return;
     setBusy(true);
     try {
       let content = text;

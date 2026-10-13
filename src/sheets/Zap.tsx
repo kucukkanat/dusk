@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import QRCode from "qrcode";
-import { fetchZapInvoice, payInvoice, hasWallet, canZap, useWallet } from "../nostr/zaps";
+import { fetchZapInvoice, payInvoice, hasWallet, canZap, useWallet, getLnurlPay } from "../nostr/zaps";
 import { pool, readRelays$, uniqRelays, DEFAULT_RELAYS, eventStore, now } from "../nostr/core";
 import { inboxesOf } from "../nostr/relays";
 import { useSettings, getSettings } from "../state/settings";
@@ -39,6 +39,11 @@ function ZapSheet({ pubkey, event }: { pubkey: string; event?: NostrEvent }) {
   const [comment, setComment] = useState(useSettings.getState().zapComment);
   const [busy, setBusy] = useState(false);
   const value = custom ? Number(custom) : amount;
+  // warm the Lightning lookup and their relay list while the amount is being picked
+  useEffect(() => {
+    getLnurlPay(pubkey).catch(() => {});
+    inboxesOf(pubkey, 2500).catch(() => {});
+  }, [pubkey]);
 
   const send = async () => {
     if (!value || value < 1) return;

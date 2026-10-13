@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -69,13 +69,24 @@ export function Lists() {
   const [tab, setTab] = useState<"mine" | "packs">(me ? "mine" : "packs");
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
+  // the follow set is a new object on every kind-3 emission; refetch only when it really changes
+  const followsKey = useMemo(() => {
+    const fl = [...follows];
+    return `${fl.length}:${fl[0] ?? ""}:${fl[fl.length - 1] ?? ""}`;
+  }, [follows]);
+  const followsRef = useRef(follows);
+  followsRef.current = follows;
   useEffect(() => {
+    let alive = true;
     setLoading(true);
-    const authors = [...follows].slice(0, 300);
+    const authors = [...followsRef.current].slice(0, 300);
     const filters = tab === "mine" ? (me ? [{ kinds: [30000, 39089], authors: [me] }] : []) : authors.length ? [{ kinds: [39089], authors, limit: 100 }] : [{ kinds: [39089], limit: 60 }];
     if (!filters.length) return setLoading(false);
-    requestAll(uniqRelays(readRelays$.value, DEFAULT_RELAYS, ["wss://purplepag.es"]), filters, 6000).then(() => setLoading(false));
-  }, [tab, me, follows]);
+    requestAll(uniqRelays(readRelays$.value, DEFAULT_RELAYS, ["wss://purplepag.es"]), filters, 6000).then(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab, me, followsKey]);
   const mine = use$(() => (me ? eventStore.timeline({ kinds: [30000, 39089], authors: [me] }) : undefined), [me]) ?? [];
   const packs = use$(() => eventStore.timeline({ kinds: [39089] }), []) ?? [];
   const list = tab === "mine" ? mine : packs.filter((p) => p.pubkey !== me);

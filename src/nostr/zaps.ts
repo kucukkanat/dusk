@@ -63,13 +63,14 @@ export function getLnurlPay(pubkey: string): Promise<LnurlPay> {
 
 /** Build and sign a zap request, then ask the recipient's Lightning provider for an invoice. */
 export async function fetchZapInvoice(opts: { pubkey: string; event?: NostrEvent; sats: number; comment?: string }): Promise<string> {
-  const info = await getLnurlPay(opts.pubkey);
+  // their relays are only needed for a nostr zap, but asking alongside the LNURL lookup costs nothing
+  const [info, inboxes] = await Promise.all([getLnurlPay(opts.pubkey), getActivePubkey() ? inboxesOf(opts.pubkey, 1500).catch(() => DEFAULT_RELAYS) : DEFAULT_RELAYS]);
   const msats = opts.sats * 1000;
   if (msats < info.minSendable || msats > info.maxSendable)
     throw new Error(`Amount must be between ${Math.ceil(info.minSendable / 1000)} and ${Math.floor(info.maxSendable / 1000)} sats`);
   const params = new URLSearchParams({ amount: String(msats) });
   if (info.allowsNostr && info.nostrPubkey && getActivePubkey()) {
-    const relays = uniqRelays(await inboxesOf(opts.pubkey, 1500), readRelays$.value, DEFAULT_RELAYS).slice(0, 6);
+    const relays = uniqRelays(inboxes, readRelays$.value, DEFAULT_RELAYS).slice(0, 6);
     const template = opts.event
       ? makeZapRequest({ event: opts.event as never, amount: msats, comment: opts.comment ?? "", relays })
       : makeZapRequest({ pubkey: opts.pubkey, amount: msats, comment: opts.comment ?? "", relays });
