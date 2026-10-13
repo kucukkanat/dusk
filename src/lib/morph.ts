@@ -53,19 +53,33 @@ export const morphTarget = (key: string) => (el: HTMLElement | null) => {
   if (el && pending?.key === key) mark(el, pending.kind);
 };
 
-/** Wait (up to ~600ms) for a back navigation to land and for `find` to locate its element. */
+/**
+ * Wait (up to 500ms) for a back navigation to land and for `find` to locate its element. Checks when the
+ * DOM changes rather than polling, so a slow screen costs nothing while it renders.
+ */
 function landed(fromIdx: number | undefined, find: () => Element | null): Promise<Element | null> {
   return new Promise((resolve) => {
-    const t0 = performance.now();
-    const tick = () => {
-      const moved = historyIdx() !== fromIdx;
-      const el = moved ? find() : null;
+    let done = false;
+    const finish = (el: Element | null) => {
+      if (done) return;
+      done = true;
+      mo.disconnect();
+      clearTimeout(timer);
+      window.removeEventListener("popstate", check);
       // one more task after the element appears so layout effects (scroll restore) have run
-      if (el) return void setTimeout(() => resolve(el), 0);
-      if (performance.now() - t0 > 600) return resolve(null);
-      setTimeout(tick, 16);
+      if (el) setTimeout(() => resolve(el), 0);
+      else resolve(null);
     };
-    tick();
+    const check = () => {
+      if (done || historyIdx() === fromIdx) return;
+      const el = find();
+      if (el) finish(el);
+    };
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("popstate", check);
+    const timer = setTimeout(() => finish(null), 500);
+    check();
   });
 }
 

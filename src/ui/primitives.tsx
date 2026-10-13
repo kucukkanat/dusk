@@ -2,7 +2,7 @@ import { useState, type ReactNode, type ButtonHTMLAttributes } from "react";
 import { Link, useNavigate } from "react-router";
 import { morph, morphTarget } from "../lib/morph";
 import { Icon, type IconName } from "./Icon";
-import { useProfile, nameOf, pictureOf, toneOf, useNip05, formatNip05 } from "../nostr/profile";
+import { useProfile, nameOf, pictureOf, toneOf, useNip05, formatNip05, type ProfileContent } from "../nostr/profile";
 import { initials } from "../lib/format";
 import { profilePath } from "../lib/links";
 import { useSettings } from "../state/settings";
@@ -10,8 +10,10 @@ import { useSettings } from "../state/settings";
 const TONE_BG: Record<string, string> = { mist: "bg-mist", peach: "bg-peach", rose: "bg-rose", sage: "bg-sage", lilac: "bg-lilac", butter: "bg-butter" };
 const SIZE = { xs: "size-[22px] text-[10px]", sm: "size-7 text-xs", md: "size-10 text-[15px]", lg: "size-[72px] text-[26px]", xl: "size-24 text-[32px]" };
 
-export function Avatar({ pubkey, size = "md", ring, className = "", morphKey }: { pubkey: string; size?: keyof typeof SIZE; ring?: boolean; className?: string; morphKey?: string }) {
-  const p = useProfile(pubkey);
+/** `profile`: pass it when the caller already has it (null = known missing) to skip a second subscription. */
+export function Avatar({ pubkey, size = "md", ring, className = "", morphKey, profile }: { pubkey: string; size?: keyof typeof SIZE; ring?: boolean; className?: string; morphKey?: string; profile?: ProfileContent | null }) {
+  const own = useProfile(profile === undefined ? pubkey : undefined);
+  const p = profile === undefined ? own : (profile ?? undefined);
   const pic = pictureOf(p);
   const dataSaver = useSettings((s) => s.dataSaver);
   const [broken, setBroken] = useState(false);
@@ -28,8 +30,9 @@ export function Avatar({ pubkey, size = "md", ring, className = "", morphKey }: 
   );
 }
 
-export function AvatarLink({ pubkey, size = "md", className }: { pubkey: string; size?: keyof typeof SIZE; className?: string }) {
-  const p = useProfile(pubkey);
+export function AvatarLink({ pubkey, size = "md", className, profile }: { pubkey: string; size?: keyof typeof SIZE; className?: string; profile?: ProfileContent | null }) {
+  const own = useProfile(profile === undefined ? pubkey : undefined);
+  const p = profile === undefined ? own : (profile ?? undefined);
   const nav = useNavigate();
   const to = profilePath(pubkey);
   return (
@@ -47,7 +50,7 @@ export function AvatarLink({ pubkey, size = "md", className }: { pubkey: string;
         morph(() => nav(to), { from: e.currentTarget.firstElementChild, key: "avatar:" + pubkey, back: find });
       }}
     >
-      <Avatar pubkey={pubkey} size={size} />
+      <Avatar pubkey={pubkey} size={size} profile={p ?? null} />
     </Link>
   );
 }

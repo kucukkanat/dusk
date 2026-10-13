@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useActivePubkey } from "../state/accounts";
 import { useSettings, type Feed, type FeedSource } from "../state/settings";
 import { feedSpec } from "../nostr/feeds";
-import { useTimeline } from "../nostr/timeline";
+import { useTimeline, getTimeline } from "../nostr/timeline";
 import { useMyMutes, isMuted } from "../nostr/lists";
 import { normalizeRelay } from "../nostr/core";
 import { openSheet, closeSheet, toast } from "../state/ui";
@@ -74,12 +74,17 @@ export function Home() {
   const feed = feeds.find((f) => f.id === activeId) ?? feeds[0];
   const me = useActivePubkey();
   const spec = useMemo(() => feedSpec(feed, me), [feed, me]);
-  const { timeline } = useTimeline(spec);
-  const step = (d: 1 | -1) => {
-    const i = feeds.findIndex((f) => f.id === feed.id);
-    const next = feeds[(i + d + feeds.length) % feeds.length];
-    set({ activeFeed: next.id });
-  };
+  const step = useCallback(
+    (d: 1 | -1) => {
+      const i = feeds.findIndex((f) => f.id === feed.id);
+      const next = feeds[(i + d + feeds.length) % feeds.length];
+      set({ activeFeed: next.id });
+    },
+    [feeds, feed.id, set],
+  );
+  // FeedView subscribes to the timeline's state; here we only need the handle
+  const refresh = useCallback(() => getTimeline(spec).refresh(), [spec]);
+  const loadMore = useCallback(() => getTimeline(spec).loadMore(), [spec]);
   return (
     <Screen
       title={<span className="md:hidden">Dusk</span>}
@@ -92,10 +97,10 @@ export function Home() {
       fab
       scrollKey={"home:" + feed.id}
       onTopbarSwipe={step}
-      onRefresh={() => timeline?.refresh()}
-      onEnd={() => timeline?.loadMore()}
+      onRefresh={refresh}
+      onEnd={loadMore}
       actions={
-        <button type="button" className="iconbtn" aria-label="Refresh" onClick={() => timeline?.refresh()}>
+        <button type="button" className="iconbtn" aria-label="Refresh" onClick={refresh}>
           <Icon name="refresh" />
         </button>
       }

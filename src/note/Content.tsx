@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -39,8 +39,17 @@ function useImeta(event?: NostrEvent) {
   }, [event]);
 }
 
+/** Decoded blurhashes as tiny data URLs, most recently used last. */
+const blurCache = new Map<string, string | undefined>();
 function blurUrl(hash?: string) {
   if (!hash) return undefined;
+  if (blurCache.has(hash)) {
+    const v = blurCache.get(hash);
+    blurCache.delete(hash);
+    blurCache.set(hash, v);
+    return v;
+  }
+  let url: string | undefined;
   try {
     const px = decodeBlurhash(hash, 16, 16);
     const c = document.createElement("canvas");
@@ -49,10 +58,13 @@ function blurUrl(hash?: string) {
     const img = ctx.createImageData(16, 16);
     img.data.set(px);
     ctx.putImageData(img, 0, 0);
-    return c.toDataURL();
+    url = c.toDataURL();
   } catch {
-    return undefined;
+    url = undefined;
   }
+  blurCache.set(hash, url);
+  if (blurCache.size > 200) blurCache.delete(blurCache.keys().next().value!);
+  return url;
 }
 
 /** Images and video, with blur placeholders and a tap-to-load guard for strangers and content warnings. */
@@ -64,6 +76,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
   if (!urls.length) return null;
   const blocked = hidden || !loaded;
   const firstMeta = meta.get(images[0] ?? urls[0]);
+  const blur = blocked ? blurUrl(firstMeta?.blurhash) : undefined;
   const ratio = (() => {
     const d = firstMeta?.dimensions?.split("x").map(Number);
     return d && d[0] && d[1] ? Math.min(1.6, Math.max(0.6, d[1] / d[0])) : 0.75;
@@ -80,7 +93,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
           onReveal?.();
         }}
       >
-        {firstMeta?.blurhash && <img src={blurUrl(firstMeta.blurhash)} alt="" className="absolute inset-0 size-full object-cover" />}
+        {blur && <img src={blur} alt="" decoding="async" className="absolute inset-0 size-full object-cover" />}
         <span className="absolute inset-0 grid place-items-center">
           <span className="inline-flex items-center gap-2 rounded-full bg-bg/80 px-4 py-2 text-[14px] font-medium">
             <Icon name={hidden ? "eyeoff" : "image"} size={18} />
@@ -96,7 +109,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
         <div className={`grid gap-1 overflow-hidden rounded-[14px] ${images.length === 2 ? "grid-cols-2" : "grid-cols-2"}`}>
           {images.slice(0, 4).map((u, i) => (
             <button key={u} type="button" className="relative aspect-square overflow-hidden bg-raised" onClick={(e) => openLightbox(images, i, images.map((x) => meta.get(x)?.alt), e.currentTarget)}>
-              <img src={u} alt={meta.get(u)?.alt ?? ""} loading="lazy" className="size-full object-cover" />
+              <img src={u} alt={meta.get(u)?.alt ?? ""} loading="lazy" decoding="async" className="size-full object-cover" />
               {i === 3 && images.length > 4 && <span className="absolute inset-0 grid place-items-center bg-black/50 text-xl font-semibold text-white">+{images.length - 4}</span>}
             </button>
           ))}
@@ -106,7 +119,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
         mediaKind(u, meta.get(u)?.type) === "audio" ? (
           <audio key={u} src={u} controls preload="none" className="w-full" />
         ) : (
-          <video key={u} src={u} controls playsInline preload="metadata" poster={meta.get(u)?.thumbnail ?? meta.get(u)?.image} className="max-h-[70vh] w-full rounded-[14px] bg-black" />
+          <video key={u} src={u} controls playsInline preload="none" poster={meta.get(u)?.thumbnail ?? meta.get(u)?.image} className="max-h-[70vh] w-full rounded-[14px] bg-black" />
         ),
       )}
     </div>
@@ -124,9 +137,15 @@ function Img({ url, meta, ratio, onOpen }: { url: string; meta?: FileMetadataFie
       </a>
     );
   return (
-    <button type="button" onClick={(e) => onOpen(e.currentTarget)} className="relative block w-full overflow-hidden rounded-[14px] bg-raised" style={meta?.dimensions ? { aspectRatio: `1 / ${ratio}` } : undefined}>
-      {blur && !done && <img src={blur} alt="" className="absolute inset-0 size-full object-cover" />}
-      <img src={url} alt={meta?.alt ?? ""} loading="lazy" decoding="async" onLoad={() => setDone(true)} onError={() => setOk(false)} className={`relative max-h-[75vh] w-full ${meta?.dimensions ? "h-full object-cover" : "object-contain"}`} />
+    <button
+      type="button"
+      onClick={(e) => onOpen(e.currentTarget)}
+      className="relative block w-full overflow-hidden rounded-[14px] bg-raised"
+      // without known dimensions, hold a 4:3 box until the image arrives so the feed doesn't jump as much
+      style={meta?.dimensions ? { aspectRatio: `1 / ${ratio}` } : done ? undefined : { aspectRatio: "4 / 3" }}
+    >
+      {blur && !done && <img src={blur} alt="" decoding="async" className="absolute inset-0 size-full object-cover" />}
+      <img src={url} alt={meta?.alt ?? ""} loading="lazy" decoding="async" onLoad={() => setDone(true)} onError={() => setOk(false)} className={`relative max-h-[75vh] w-full ${meta?.dimensions ? "h-full object-cover" : done ? "object-contain" : "h-full object-contain"}`} />
       {meta?.alt && <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-1.5 text-[11px] font-semibold text-white">ALT</span>}
     </button>
   );
@@ -155,7 +174,8 @@ function MentionName({ pubkey }: { pubkey: string }) {
 
 /** A quoted note, article or other event referenced from content. */
 export function EmbeddedEvent({ pointer, depth = 0 }: { pointer: string | { id: string; relays?: string[] } | { kind: number; pubkey: string; identifier: string; relays?: string[] }; depth?: number }) {
-  const ev = use$(() => eventStore.event(pointer as never), [JSON.stringify(pointer)]);
+  const pkey = useMemo(() => (typeof pointer === "string" ? pointer : JSON.stringify(pointer)), [pointer]);
+  const ev = use$(() => eventStore.event(pointer as never), [pkey]);
   const nav = useNavigate();
   const profile = useProfile(ev?.pubkey);
   if (!ev)
@@ -177,7 +197,7 @@ export function EmbeddedEvent({ pointer, depth = 0 }: { pointer: string | { id: 
       onKeyDown={(e) => e.key === "Enter" && nav(eventPath(ev))}
     >
       <span className="flex items-center gap-2 text-[13px] text-muted">
-        <Avatar pubkey={ev.pubkey} size="xs" />
+        <Avatar pubkey={ev.pubkey} size="xs" profile={profile ?? null} />
         <span className="truncate font-semibold text-ink">{nameOf(profile, ev.pubkey)}</span>
         <span>· {ago(ev.created_at)}</span>
       </span>
@@ -198,9 +218,22 @@ export function EmbeddedEvent({ pointer, depth = 0 }: { pointer: string | { id: 
 }
 
 /** Render a note's text: mentions, hashtags, links, custom emoji and media. */
-export function RichText({ event, content, depth = 0, inline, hideMedia, blurMedia }: { event: NostrEvent; content?: string; depth?: number; inline?: boolean; hideMedia?: boolean; blurMedia?: boolean }) {
+export const RichText = memo(function RichText({ event, content, depth = 0, inline, hideMedia, blurMedia }: { event: NostrEvent; content?: string; depth?: number; inline?: boolean; hideMedia?: boolean; blurMedia?: boolean }) {
   const meta = useImeta(event);
   const nodes = useMemo(() => getParsedContent(event, content).children as Node[], [event, content]);
+  const { parts, media, embeds, links } = useMemo(() => buildParts(nodes, meta, depth, hideMedia), [nodes, meta, depth, hideMedia]);
+  if (inline) return <>{parts}</>;
+  return (
+    <>
+      {parts.length > 0 && <div className="prose-note">{parts}</div>}
+      {!hideMedia && <MediaGrid urls={media} meta={meta} hidden={blurMedia} />}
+      {embeds}
+      {!media.length && !embeds.length && links.length > 0 && depth === 0 && <LinkCard url={links[links.length - 1]} />}
+    </>
+  );
+});
+
+function buildParts(nodes: Node[], meta: Map<string, FileMetadataFields>, depth: number, hideMedia?: boolean) {
   const media: string[] = [];
   const embeds: ReactNode[] = [];
   const links: string[] = [];
@@ -218,7 +251,7 @@ export function RichText({ event, content, depth = 0, inline, hideMedia, blurMed
         );
         break;
       case "emoji":
-        parts.push(<img key={i} src={n.url} alt={n.raw} title={n.code} className="inline-block h-[1.3em] w-auto align-[-0.25em]" loading="lazy" />);
+        parts.push(<img key={i} src={n.url} alt={n.raw} title={n.code} className="inline-block h-[1.3em] w-auto align-[-0.25em]" loading="lazy" decoding="async" />);
         break;
       case "gallery":
         media.push(...n.links);
@@ -227,10 +260,11 @@ export function RichText({ event, content, depth = 0, inline, hideMedia, blurMed
         const kind = mediaKind(n.href, meta.get(n.href)?.type);
         if (kind && !hideMedia) media.push(n.href);
         else {
+          const label = n.value.replace(/^https?:\/\/(www\.)?/, "");
           parts.push(
             <a key={i} href={n.href} target="_blank" rel="noreferrer noopener" className="font-medium text-accent-ink" onClick={(e) => e.stopPropagation()}>
-              {n.value.replace(/^https?:\/\/(www\.)?/, "").slice(0, 48)}
-              {n.value.replace(/^https?:\/\/(www\.)?/, "").length > 48 ? "…" : ""}
+              {label.slice(0, 48)}
+              {label.length > 48 ? "…" : ""}
             </a>,
           );
           if (!kind) links.push(n.href);
@@ -268,13 +302,5 @@ export function RichText({ event, content, depth = 0, inline, hideMedia, blurMed
   if (typeof parts[parts.length - 1] === "string") parts[parts.length - 1] = (parts[parts.length - 1] as string).trimEnd();
   // imeta-only media (e.g. kind 20 pictures)
   for (const u of meta.keys()) if (!media.includes(u) && mediaKind(u, meta.get(u)?.type)) media.push(u);
-  if (inline) return <>{parts}</>;
-  return (
-    <>
-      {parts.length > 0 && <div className="prose-note">{parts}</div>}
-      {!hideMedia && <MediaGrid urls={media} meta={meta} hidden={blurMedia} />}
-      {embeds}
-      {!media.length && !embeds.length && links.length > 0 && depth === 0 && <LinkCard url={links[links.length - 1]} />}
-    </>
-  );
+  return { parts, media, embeds, links };
 }

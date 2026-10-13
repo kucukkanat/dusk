@@ -1,12 +1,14 @@
 import { morph, morphTarget } from "../lib/morph";
-import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from "react-virtuoso";
+import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getNip10References } from "applesauce-common/helpers/threading";
 import { getContentWarning } from "applesauce-common/helpers/content";
 import { eventStore } from "../nostr/core";
-import { useEngagement } from "../nostr/engagement";
+import { useEngagement, type Engagement } from "../nostr/engagement";
 import { useProfile, nameOf } from "../nostr/profile";
 import { useActivePubkey } from "../state/accounts";
 import { useSettings, type SwipeAction } from "../state/settings";
@@ -16,6 +18,7 @@ import { ago, fmtCount, fullDate } from "../lib/format";
 import { Icon, type IconName } from "../ui/Icon";
 import { AvatarLink, Name, Nip05 } from "../ui/primitives";
 import { SwipeRow, type SwipeSide } from "../ui/SwipeRow";
+import { ScrollerContext } from "../ui/Screen";
 import { RichText } from "./Content";
 import { KindBody, hasKindBody } from "./KindBodies";
 import { react, unreact, requireSignIn } from "./actions";
@@ -109,15 +112,16 @@ function Hearts() {
   );
 }
 
-function Count({ n }: { n: number }) {
-  const hide = useSettings((s) => s.hideCounts);
+function Count({ n, hide }: { n: number; hide: boolean }) {
   return <span className="min-w-[2ch] text-left">{hide || !n ? "" : fmtCount(n)}</span>;
 }
 
-export function NoteActions({ event, focus }: { event: NostrEvent; focus?: boolean }) {
-  const eng = useEngagement(event);
+export function NoteActions({ event, focus, eng: shared }: { event: NostrEvent; focus?: boolean; eng?: Engagement }) {
+  const own = useEngagement(shared ? undefined : event);
+  const eng = shared ?? own;
   const [pop, setPop] = useState(false);
   const oneTap = useSettings((s) => s.oneTapZap);
+  const hide = useSettings((s) => s.hideCounts);
   const liked = !!eng.myLike;
   const like = () => {
     if (!requireSignIn()) return;
@@ -132,11 +136,11 @@ export function NoteActions({ event, focus }: { event: NostrEvent; focus?: boole
     <div className={`-mx-2 mt-1 -mb-2 flex justify-between ${focus ? "max-w-none" : "max-w-[340px]"}`} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="iconbtn" aria-label={`Reply${eng.replies ? `, ${eng.replies} replies` : ""}`} onClick={() => requireSignIn() && openCompose({ replyTo: event })}>
         <Icon name="reply" />
-        <Count n={eng.replies} />
+        <Count n={eng.replies} hide={hide} />
       </button>
       <button type="button" className={`iconbtn ${eng.myRepost ? "text-sage-ink" : ""}`} aria-pressed={!!eng.myRepost} aria-label="Repost" onClick={() => requireSignIn() && openRepost(event, eng.myRepost)}>
         <Icon name="repost" />
-        <Count n={eng.reposts} />
+        <Count n={eng.reposts} hide={hide} />
       </button>
       <button
         type="button"
@@ -150,12 +154,12 @@ export function NoteActions({ event, focus }: { event: NostrEvent; focus?: boole
         }}
       >
         <Icon name="like" />
-        <Count n={eng.likes} />
+        <Count n={eng.likes} hide={hide} />
         {pop && <Hearts />}
       </button>
       <button type="button" className={`iconbtn ${eng.myZapped ? "text-peach-ink" : ""}`} aria-pressed={eng.myZapped} aria-label="Zap" onClick={() => requireSignIn() && openZap({ event, pubkey: event.pubkey, oneTap })}>
         <Icon name="zap" />
-        <Count n={eng.zaps} />
+        <Count n={eng.zaps} hide={hide} />
       </button>
       <button type="button" className="iconbtn" aria-label="More options" onClick={() => openNoteMenu(event)}>
         <Icon name="more" />
@@ -164,15 +168,14 @@ export function NoteActions({ event, focus }: { event: NostrEvent; focus?: boole
   );
 }
 
-function ReactionStrip({ event }: { event: NostrEvent }) {
-  const eng = useEngagement(event);
+function ReactionStrip({ event, eng }: { event: NostrEvent; eng: Engagement }) {
   const items = [...eng.reactions.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 8);
   if (!items.length && !eng.zapCount) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
       {items.map(([c, r]) => (
         <button key={c} type="button" className={`chip min-h-8 px-3 text-[14px] ${r.mine ? "border-accent" : ""}`} onClick={() => (r.mine ? eng.myLike && unreact(eng.myLike) : requireSignIn() && react(event, r.url ? { shortcode: c.slice(1, -1), url: r.url } : c))}>
-          {r.url ? <img src={r.url} alt={c} className="size-5" /> : c === "+" ? <Icon name="like" size={16} className="text-rose-ink" /> : <span>{c}</span>}
+          {r.url ? <img src={r.url} alt={c} loading="lazy" decoding="async" className="size-5" /> : c === "+" ? <Icon name="like" size={16} className="text-rose-ink" /> : <span>{c}</span>}
           <span className="text-muted">{r.count}</span>
         </button>
       ))}
@@ -186,15 +189,15 @@ function ReactionStrip({ event }: { event: NostrEvent }) {
 function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event: NostrEvent; by?: string } & NoteOpts) {
   const nav = useNavigate();
   const me = useActivePubkey();
-  const settings = useSettings();
+  const settings = useSettings(useShallow((s) => ({ blurMedia: s.blurMedia, density: s.density, swipeStart: s.swipeStart, swipeEnd: s.swipeEnd })));
   const following = useFollowing(me);
   const mutes = useMyMutes();
-  const bookmarks = useMyBookmarks();
+  const bookmarked = useMyBookmarks().has(event.id);
   const author = useProfile(event.pubkey);
   const cw = useMemo(() => getContentWarning(event), [event]);
   const [revealed, setRevealed] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
-  const muted = !showMuted && isMuted(event, mutes);
+  const muted = useMemo(() => !showMuted && isMuted(event, mutes), [showMuted, event, mutes]);
   const isReply = useMemo(() => {
     if (event.kind !== 1) return false;
     const r = getNip10References(event);
@@ -214,7 +217,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
   }
 
   // guests have no follows to judge by, so only "always blur" applies to them
-  const stranger = me ? following.size > 0 && !following.has(event.pubkey) && event.pubkey !== me : false;
+  const stranger = !!me && following.size > 0 && !following.has(event.pubkey) && event.pubkey !== me;
   const blur = settings.blurMedia === "always" || (settings.blurMedia === "strangers" && stranger) || !!cw;
   const run = (a: SwipeAction) => () => {
     if (a !== "bookmark" && a !== "mute" && !requireSignIn()) return;
@@ -226,15 +229,15 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
       case "repost":
         return openRepost(event);
       case "zap":
-        return openZap({ event, pubkey: event.pubkey, oneTap: settings.oneTapZap });
+        return openZap({ event, pubkey: event.pubkey, oneTap: useSettings.getState().oneTapZap });
       case "bookmark":
-        return requireSignIn() && setBookmark(event, !bookmarks.has(event.id));
+        return requireSignIn() && setBookmark(event, !bookmarked);
       case "mute":
         if (!requireSignIn()) return;
         setMute("user", event.pubkey, true).then(() => toast(`Muted ${nameOf(author, event.pubkey)}`, { undo: () => setMute("user", event.pubkey, false) }));
     }
   };
-  const side = (a: SwipeAction): SwipeSide => ({ ...ACTIONS[a], label: a === "mute" ? `Mute ${nameOf(author, event.pubkey).split(" ")[0]}` : a === "bookmark" && bookmarks.has(event.id) ? "Unbookmark" : ACTIONS[a].label, run: run(a) });
+  const side = (a: SwipeAction): SwipeSide => ({ ...ACTIONS[a], label: a === "mute" ? `Mute ${nameOf(author, event.pubkey).split(" ")[0]}` : a === "bookmark" && bookmarked ? "Unbookmark" : ACTIONS[a].label, run: run(a) });
 
   const open = (el?: Element) => {
     if (focus || preview) return;
@@ -245,7 +248,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
   const body: ReactNode = hasKindBody(event.kind) ? (
     <KindBody event={event} focus={focus} blur={blur && !revealed} />
   ) : (
-    <Clamp on={!focus && !preview}>
+    <Clamp on={!focus && !preview} id={event.id}>
       <div className={`mt-1 ${focus ? "text-[18px] leading-7" : "text-base leading-6"}`}>
         <RichText event={event} blurMedia={blur && !revealed} />
       </div>
@@ -263,7 +266,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open(e.currentTarget)}
     >
       <div className="flex flex-col items-center">
-        <AvatarLink pubkey={event.pubkey} />
+        <AvatarLink pubkey={event.pubkey} profile={author ?? null} />
       </div>
       <div className="min-w-0">
         {by && (
@@ -279,7 +282,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
           <Link to={profilePath(event.pubkey)} className="truncate text-base leading-[22px] font-semibold hover:underline" onClick={(e) => e.stopPropagation()}>
             {nameOf(author, event.pubkey)}
           </Link>
-          {focus ? <Nip05 pubkey={event.pubkey} /> : <span className="flex-none text-[13px] text-muted tabular-nums" title={fullDate(event.created_at)}>{ago(event.created_at)}</span>}
+          {focus ? <Nip05 pubkey={event.pubkey} /> : <span className="flex-none text-[13px] text-muted tabular-nums" onPointerEnter={(e) => (e.currentTarget.title ||= fullDate(event.created_at))}>{ago(event.created_at)}</span>}
         </div>
         {isReply && !inThread && <ReplyingTo event={event} />}
         {cw && !revealed ? (
@@ -296,10 +299,10 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
         {focus && (
           <>
             <div className="mt-3 border-t border-line pt-3 text-[13px] text-muted">{fullDate(event.created_at)}</div>
-            <ReactionStrip event={event} />
+            <FocusExtras event={event} actions={!preview} />
           </>
         )}
-        {!preview && <NoteActions event={event} focus={focus} />}
+        {!preview && !focus && <NoteActions event={event} />}
       </div>
     </article>
   );
@@ -311,14 +314,33 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
   );
 }
 
+/** The focused note's reactions and actions, sharing one engagement read. */
+function FocusExtras({ event, actions }: { event: NostrEvent; actions: boolean }) {
+  const eng = useEngagement(event);
+  return (
+    <>
+      <ReactionStrip event={event} eng={eng} />
+      {actions && <NoteActions event={event} focus eng={eng} />}
+    </>
+  );
+}
+
 /** Fold very long notes in feeds behind "Show more". */
-function Clamp({ on, children }: { on: boolean; children: ReactNode }) {
+function Clamp({ on, id, children }: { on: boolean; id: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [tall, setTall] = useState(false);
   const [open, setOpen] = useState(false);
+  // measure once per note, then watch for late growth (images loading) until it turns out tall
   useLayoutEffect(() => {
-    if (on && ref.current) setTall(ref.current.scrollHeight > 520);
-  }, [on, children]);
+    const el = ref.current;
+    if (!on || !el) return;
+    const check = () => el.scrollHeight > 520 && (setTall(true), true);
+    if (check()) return;
+    const ro = new ResizeObserver(() => check() && ro.disconnect());
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [on, id]);
   if (!on) return <>{children}</>;
   return (
     <>
@@ -334,13 +356,57 @@ function Clamp({ on, children }: { on: boolean; children: ReactNode }) {
   );
 }
 
+/** Remembered window state (measured sizes and offset) per screen, so a list comes back where it was. */
+const listState = new Map<string, { first?: string; state: StateSnapshot }>();
+/** Short lists render plainly; longer ones only render what's near the viewport. */
+const WINDOW_AFTER = 20;
+
 /** A list of notes with dividers. */
-export function NoteList({ events, inThread, fresh }: { events: NostrEvent[]; inThread?: boolean; fresh?: Set<string> }) {
+export function NoteList({ events: all, inThread, fresh }: { events: NostrEvent[]; inThread?: boolean; fresh?: Set<string> }) {
+  const sc = useContext(ScrollerContext);
+  // muted notes render nothing outside threads; drop them here so the window never holds empty rows
+  const mutes = useMyMutes();
+  const events = useMemo(() => (inThread ? all : all.filter((e) => !isMuted(e, mutes))), [all, mutes, inThread]);
+  const handle = useRef<VirtuosoHandle>(null);
+  const key = sc?.key;
+  const first = events[0]?.id;
+  const firstRef = useRef(first);
+  firstRef.current = first;
+  const windowed = !!sc?.el && events.length > WINDOW_AFTER;
+  useEffect(() => {
+    if (!windowed || !key) return;
+    const h = handle.current;
+    return () => h?.getState((state) => listState.set(key, { first: firstRef.current, state }));
+  }, [windowed, key]);
+  // decided once, when the scroller is known: only a list that mounts windowed with the same data comes back where it was
+  const restore = useRef<StateSnapshot | undefined | null>(null);
+  if (restore.current === null && sc?.el) {
+    const saved = key ? listState.get(key) : undefined;
+    restore.current = windowed && saved?.first === first ? saved.state : undefined;
+  }
+  if (!windowed || !sc?.el)
+    return (
+      <div className="[&>*+*]:border-t [&>*+*]:border-line">
+        {/* inside a screen, wait one commit for its scroller before deciding to window a long list */}
+        {sc && !sc.el && events.length > WINDOW_AFTER
+          ? null
+          : events.map((e) => <NoteCard key={e.id} event={e} inThread={inThread} isNew={fresh?.has(e.id)} />)}
+      </div>
+    );
   return (
-    <div className="[&>*+*]:border-t [&>*+*]:border-line">
-      {events.map((e) => (
-        <NoteCard key={e.id} event={e} inThread={inThread} isNew={fresh?.has(e.id)} />
-      ))}
-    </div>
+    <Virtuoso
+      ref={handle}
+      customScrollParent={sc.el}
+      data={events}
+      computeItemKey={(_, e) => e.id}
+      defaultItemHeight={200}
+      increaseViewportBy={{ top: 800, bottom: 800 }}
+      restoreStateFrom={restore.current ?? undefined}
+      itemContent={(i, e) => (
+        <div className={i ? "border-t border-line" : undefined}>
+          <NoteCard event={e} inThread={inThread} isNew={fresh?.has(e.id)} />
+        </div>
+      )}
+    />
   );
 }

@@ -11,7 +11,9 @@ const SETTLE_MS = 460;
  * positions (ease-in), then snaps onto the new item with a springy overshoot.
  */
 export function Slider({ container, selector, deps, className }: { container: RefObject<HTMLElement | null>; selector: string; deps: unknown[]; className: string }) {
-  const [box, setBox] = useState<Box | null>(null);
+  // `box` is what's shown; the element is sized to `base` (the item it rests on) and reaches `box` by
+  // translate + scale only, so the animation stays on the compositor
+  const [{ box, base }, setState] = useState<{ box: Box | null; base: Box | null }>({ box: null, base: null });
   const [transition, setTransition] = useState("none");
   const prev = useRef<Box | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,11 +36,11 @@ export function Slider({ container, selector, deps, className }: { container: Re
     if (timer.current) clearTimeout(timer.current);
     const from = prev.current;
     prev.current = target;
-    if (!target) return setBox(null);
+    if (!target) return setState({ box: null, base: null });
     const motionOff = reduce || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!from || motionOff || (from.x === target.x && from.y === target.y)) {
       setTransition("none");
-      setBox(target);
+      setState({ box: target, base: target });
       return;
     }
     // 1. stretch a little toward the new item (capped, so long jumps don't make a tall blob)
@@ -62,13 +64,13 @@ export function Slider({ container, selector, deps, className }: { container: Re
       union.y -= bulge / 2;
       union.h += bulge;
     }
-    setTransition(`left ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), top ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), width ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35), height ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35)`);
-    setBox(union);
+    setTransition(`transform ${STRETCH_MS}ms cubic-bezier(.55,0,.85,.35)`);
+    setState({ box: union, base: target });
     // 2. settle on the new item with a wobble
     timer.current = setTimeout(() => {
       const ease = "cubic-bezier(.3,1.9,.45,.85)";
-      setTransition(`left ${SETTLE_MS}ms ${ease}, top ${SETTLE_MS}ms ${ease}, width ${SETTLE_MS}ms ${ease}, height ${SETTLE_MS}ms ${ease}`);
-      setBox(target);
+      setTransition(`transform ${SETTLE_MS}ms ${ease}`);
+      setState({ box: target, base: target });
     }, STRETCH_MS);
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -80,7 +82,7 @@ export function Slider({ container, selector, deps, className }: { container: Re
       const t = measure();
       prev.current = t;
       setTransition("none");
-      setBox(t);
+      setState({ box: t, base: t });
     });
     ro.observe(root);
     return () => ro.disconnect();
@@ -95,7 +97,11 @@ export function Slider({ container, selector, deps, className }: { container: Re
       ref={self}
       aria-hidden="true"
       className={`pointer-events-none absolute z-0 ${className}`}
-      style={box ? { left: box.x, top: box.y, width: box.w, height: box.h, transition } : { display: "none" }}
+      style={
+        box && base
+          ? { left: 0, top: 0, width: base.w, height: base.h, transformOrigin: "0 0", transform: `translate(${box.x}px, ${box.y}px) scale(${box.w / (base.w || 1)}, ${box.h / (base.h || 1)})`, transition, willChange: "transform" }
+          : { display: "none" }
+      }
     />
   );
 }

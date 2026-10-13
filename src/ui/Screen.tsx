@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useMemo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Icon } from "./Icon";
 import { SyncPill } from "./SyncPill";
@@ -25,6 +25,9 @@ type Props = {
 
 const scrollMem = new Map<string, number>();
 
+/** The screen's scroll container and scroll key, for lists that window themselves (NoteList). */
+export const ScrollerContext = createContext<{ el: HTMLElement | null; key: string } | null>(null);
+
 export function useBack() {
   const nav = useNavigate();
   return () => {
@@ -34,7 +37,12 @@ export function useBack() {
 }
 
 export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRefresh, onEnd, children, scrollKey, chat, wide, onTopbarSwipe }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const setRef = useCallback((n: HTMLDivElement | null) => {
+    ref.current = n;
+    setScroller(n);
+  }, []);
   const endRef = useRef<HTMLDivElement>(null);
   const goBack = useBack();
   const loc = useLocation();
@@ -48,9 +56,29 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     if (!el) return;
     if (chat) el.scrollTop = el.scrollHeight;
     else el.scrollTop = scrollMem.get(key) ?? 0;
+    const want = chat ? 0 : (scrollMem.get(key) ?? 0);
+    // windowed lists render their rows a moment later: keep re-applying until the content is tall
+    // enough, the user takes over, or a second has passed
+    let ro: ResizeObserver | null = null;
+    const stop = () => (ro?.disconnect(), (ro = null));
+    if (want > 0 && Math.abs(el.scrollTop - want) > 1 && el.firstElementChild) {
+      ro = new ResizeObserver(() => {
+        el.scrollTop = want;
+        if (Math.abs(el.scrollTop - want) <= 1) stop();
+      });
+      for (const c of el.children) ro.observe(c);
+      setTimeout(stop, 1000);
+    }
     const onScroll = () => scrollMem.set(key, el.scrollTop);
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    el.addEventListener("touchstart", stop, { passive: true });
+    el.addEventListener("wheel", stop, { passive: true });
+    return () => {
+      stop();
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("touchstart", stop);
+      el.removeEventListener("wheel", stop);
+    };
   }, [key, chat]);
 
   // chats stay pinned to the newest message when the scroller shrinks (keyboard opening) or grows
@@ -66,18 +94,26 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     return () => (el.removeEventListener("scroll", onScroll), ro.disconnect());
   }, [chat]);
 
+  // callers pass inline handlers; keep the latest in refs so observers and listeners are set up once
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+  const hasEnd = !!onEnd;
+  const hasRefresh = !!onRefresh;
+
   // infinite scroll
   useEffect(() => {
-    if (!onEnd || !endRef.current) return;
-    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && onEnd(), { root: ref.current, rootMargin: "800px" });
+    if (!hasEnd || !endRef.current) return;
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && onEndRef.current?.(), { root: ref.current, rootMargin: "800px" });
     io.observe(endRef.current);
     return () => io.disconnect();
-  }, [onEnd]);
+  }, [hasEnd]);
 
   // pull to refresh (touch)
   useEffect(() => {
     const el = ref.current;
-    if (!el || !onRefresh) return;
+    if (!el || !hasRefresh) return;
     let y0 = 0;
     let active = false;
     let d = 0;
@@ -98,7 +134,7 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
       active = false;
       if (d * 0.5 >= 64) {
         setRefreshing(true);
-        Promise.resolve(onRefresh()).finally(() => {
+        Promise.resolve(onRefreshRef.current?.()).finally(() => {
           setRefreshing(false);
           setPull(0);
         });
@@ -112,16 +148,18 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
       el.removeEventListener("touchmove", move);
       el.removeEventListener("touchend", end);
     };
-  }, [onRefresh]);
+  }, [hasRefresh]);
 
   // swipe from the left edge to go back, like a native navigation stack
   const sectionRef = useRef<HTMLElement>(null);
+  const shadeRef = useRef<HTMLDivElement>(null);
   const backRef = useRef(goBack);
   backRef.current = goBack;
   // the same screen component can be reused for the previous route, so clear any leftover offset
   useEffect(() => {
     const el = sectionRef.current;
-    if (el) (el.style.transform = ""), (el.style.transition = ""), (el.style.boxShadow = "");
+    if (el) (el.style.transform = ""), (el.style.transition = "");
+    if (shadeRef.current) (shadeRef.current.style.opacity = ""), (shadeRef.current.style.transition = "");
   }, [loc.key]);
   useEffect(() => {
     const el = sectionRef.current;
@@ -131,27 +169,36 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
     const set = (x: number, animate: boolean) => {
       el.style.transition = animate ? (x ? "transform 200ms var(--ease-calm)" : "transform var(--spring-ms) var(--ease-spring)") : "none";
       el.style.transform = x ? `translateX(${x}px)` : "";
-      el.style.boxShadow = x ? "-12px 0 32px rgba(0, 0, 0, 0.25)" : "";
+      // the edge shadow is a separate layer that only fades, so nothing repaints a blur per frame
+      const shade = shadeRef.current;
+      if (shade) {
+        shade.style.transition = animate ? "opacity 200ms" : "none";
+        shade.style.opacity = x ? "1" : "";
+      }
     };
-    const start = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (e.touches.length !== 1 || t.clientX > 24) return;
-      x0 = t.clientX; y0 = t.clientY; t0 = e.timeStamp; dx = 0;
-      state = "maybe";
-    };
+    // the blocking (non-passive) move listener only exists while a touch that started at the edge is down
     const move = (e: TouchEvent) => {
       if (state === "idle") return;
       const t = e.touches[0];
       dx = Math.max(0, t.clientX - x0);
       if (state === "maybe") {
-        if (Math.abs(t.clientY - y0) > 10) return void (state = "idle");
+        if (Math.abs(t.clientY - y0) > 10) return void ((state = "idle"), detach());
         if (dx < 10) return;
         state = "drag";
       }
       e.preventDefault();
       set(dx, false);
     };
+    const detach = () => el.removeEventListener("touchmove", move);
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (e.touches.length !== 1 || t.clientX > 24) return;
+      x0 = t.clientX; y0 = t.clientY; t0 = e.timeStamp; dx = 0;
+      state = "maybe";
+      el.addEventListener("touchmove", move, { passive: false });
+    };
     const end = (e: TouchEvent) => {
+      detach();
       if (state !== "drag") return void (state = "idle");
       state = "idle";
       const fast = dx / Math.max(1, e.timeStamp - t0) > 0.5;
@@ -161,12 +208,11 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
       } else set(0, true);
     };
     el.addEventListener("touchstart", start, { passive: true });
-    el.addEventListener("touchmove", move, { passive: false });
     el.addEventListener("touchend", end);
     el.addEventListener("touchcancel", end);
     return () => {
+      detach();
       el.removeEventListener("touchstart", start);
-      el.removeEventListener("touchmove", move);
       el.removeEventListener("touchend", end);
       el.removeEventListener("touchcancel", end);
     };
@@ -174,9 +220,11 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
 
   // swipe the top bar sideways to switch feeds
   const tx = useRef<number | null>(null);
+  const ctx = useMemo(() => ({ el: scroller, key }), [scroller, key]);
 
   return (
     <section ref={sectionRef} className="relative flex h-full min-h-0 flex-col bg-bg animate-fade" data-screen>
+      {back && <div ref={shadeRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-full w-8 bg-[linear-gradient(to_left,rgba(0,0,0,0.25),transparent)] opacity-0" />}
       <header
         className={`flex min-h-14 flex-none items-center gap-2 bg-bg pt-[env(safe-area-inset-top)] pr-2 ${back ? "pl-1" : "pl-4"}`}
         onTouchStart={onTopbarSwipe ? (e) => (tx.current = e.touches[0].clientX) : undefined}
@@ -203,14 +251,14 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
         </div>
       </header>
       {sub}
-      <div ref={ref} className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain" data-scroller>
+      <div ref={setRef} className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain" data-scroller>
         {onRefresh && (pull > 0 || refreshing) && (
           <div className="flex items-center justify-center text-[13px] text-muted" style={{ height: refreshing ? 56 : pull }}>
             {refreshing ? <span className="spinner" /> : pull >= 64 ? "Release to refresh" : "Pull to refresh"}
           </div>
         )}
         <div className={`mx-auto ${wide ? "" : "max-w-[600px]"} pb-24 md:pb-8`}>
-          {children}
+          <ScrollerContext.Provider value={ctx}>{children}</ScrollerContext.Provider>
           {onEnd && <div ref={endRef} className="h-px" />}
         </div>
       </div>

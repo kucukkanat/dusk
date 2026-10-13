@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -42,9 +42,15 @@ function useUnreadCounts() {
   return { activity, messages: convs.reduce((n, c) => n + (c.isRequest ? 0 : c.unread), 0) };
 }
 
+/* Unread counts are computed once (by useAppBadge, mounted in the app layout) and shared with the nav. */
+let counts = { activity: 0, messages: 0 };
+const countSubs = new Set<() => void>();
+const subCounts = (f: () => void) => (countSubs.add(f), () => void countSubs.delete(f));
+const getCounts = () => counts;
+
 function useDots() {
-  const c = useUnreadCounts();
-  return { activity: c.activity > 0, messages: c.messages > 0 } as Record<string, boolean>;
+  const c = useSyncExternalStore(subCounts, getCounts);
+  return useMemo(() => ({ activity: c.activity > 0, messages: c.messages > 0 }) as Record<string, boolean>, [c]);
 }
 
 /** Unread activity and messages as a badge on the home-screen icon. (iOS shows it only once notifications are allowed.) */
@@ -52,10 +58,24 @@ export function useAppBadge() {
   const { activity, messages } = useUnreadCounts();
   const n = activity + messages;
   useEffect(() => {
+    if (counts.activity === activity && counts.messages === messages) return;
+    counts = { activity, messages };
+    for (const f of countSubs) f();
+  }, [activity, messages]);
+  useEffect(() => {
     if (!("setAppBadge" in navigator)) return;
     (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
   }, [n]);
 }
+
+/** Whether the wide layout (sidebar instead of dock) applies; matches Tailwind's md breakpoint. */
+const WIDE = "(min-width: 768px)";
+const subWide = (f: () => void) => {
+  const m = matchMedia(WIDE);
+  m.addEventListener("change", f);
+  return () => m.removeEventListener("change", f);
+};
+export const useWide = () => useSyncExternalStore(subWide, () => matchMedia(WIDE).matches);
 
 /** The nav item a path belongs to. */
 function activeId(path: string, ids: string[]) {
@@ -100,7 +120,12 @@ const scrollToTop = () => document.querySelector("main [data-scroller]")?.scroll
 
 const fullOrder = (order: string[]) => [...order, ...Object.keys(NAV_ITEMS).filter((k) => !order.includes(k))].filter((k) => NAV_ITEMS[k]);
 
+/** Only one of Rail and TabBar is mounted at a time, so their hooks don't run twice. */
 export function Rail() {
+  return useWide() ? <RailView /> : null;
+}
+
+function RailView() {
   const me = useActivePubkey();
   const dots = useDots();
   const accounts = useAccounts((s) => s.accounts);
@@ -182,6 +207,10 @@ export function Rail() {
 }
 
 export function TabBar() {
+  return useWide() ? null : <TabBarView />;
+}
+
+function TabBarView() {
   const dots = useDots();
   const loc = useLocation();
   const ref = useRef<HTMLElement>(null);

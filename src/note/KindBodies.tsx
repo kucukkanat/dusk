@@ -75,7 +75,7 @@ function ArticleCard({ event }: { event: NostrEvent }) {
   const summary = getArticleSummary(event) ?? event.content.replace(/[#*_>`[\]()!-]/g, "").slice(0, 220);
   return (
     <Link to={eventPath(event)} className="mt-2 block overflow-hidden rounded-[14px] border border-line transition-colors hover:bg-wash" onClick={(e) => e.stopPropagation()}>
-      {image && <img src={image} alt="" loading="lazy" className="aspect-[2/1] w-full object-cover" />}
+      {image && <img src={image} alt="" loading="lazy" decoding="async" className="aspect-[2/1] w-full object-cover" />}
       <span className="block p-3">
         <span className="flex items-center gap-1 text-[13px] text-muted">
           <Icon name="book" size={16} />
@@ -95,7 +95,7 @@ function LiveCard({ event }: { event: NostrEvent }) {
   return (
     <Link to={eventPath(event)} className="mt-2 block overflow-hidden rounded-[14px] border border-line hover:bg-wash" onClick={(e) => e.stopPropagation()}>
       <span className="relative block">
-        {image ? <img src={image} alt="" loading="lazy" className="aspect-video w-full object-cover" /> : <span className="block aspect-video w-full bg-raised" />}
+        {image ? <img src={image} alt="" loading="lazy" decoding="async" className="aspect-video w-full object-cover" /> : <span className="block aspect-video w-full bg-raised" />}
         <span className={`absolute top-2 left-2 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${status === "live" ? "bg-clay text-on-accent" : "bg-bg/80 text-muted"}`}>{status === "live" ? "LIVE" : status === "planned" ? "Planned" : "Ended"}</span>
       </span>
       <span className="block p-3">
@@ -124,7 +124,7 @@ function CalendarCard({ event }: { event: NostrEvent }) {
   const loc = getCalendarEventLocations(event)[0];
   return (
     <Link to={eventPath(event)} className="mt-2 block overflow-hidden rounded-[14px] border border-line hover:bg-wash" onClick={(e) => e.stopPropagation()}>
-      {image && <img src={image} alt="" loading="lazy" className="aspect-[2/1] w-full object-cover" />}
+      {image && <img src={image} alt="" loading="lazy" decoding="async" className="aspect-[2/1] w-full object-cover" />}
       <span className="block p-3">
         <span className="flex items-center gap-1 text-[13px] text-muted">
           <Icon name="calendar" size={16} />
@@ -147,7 +147,7 @@ function BadgeCard({ event }: { event: NostrEvent }) {
   const img = getBadgeImage(event);
   return (
     <Link to={eventPath(event)} className="mt-2 flex items-center gap-3 rounded-[14px] border border-line p-3 hover:bg-wash" onClick={(e) => e.stopPropagation()}>
-      {img ? <img src={img.url} alt="" className="size-14 rounded-[10px] object-cover" /> : <Icon name="badge" size={40} className="text-lilac-ink" />}
+      {img ? <img src={img.url} alt="" loading="lazy" decoding="async" className="size-14 rounded-[10px] object-cover" /> : <Icon name="badge" size={40} className="text-lilac-ink" />}
       <span className="min-w-0">
         <span className="block font-semibold">{getBadgeName(event) ?? "Badge"}</span>
         <span className="line-clamp-2 block text-[14px] text-muted">{getBadgeDescription(event)}</span>

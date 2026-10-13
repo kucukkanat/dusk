@@ -162,12 +162,14 @@
 @keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes heart-pop { 0% { transform: scale(1); } 25% { transform: scale(0.7); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
 @keyframes heart-float { 0% { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(var(--s)) rotate(var(--r)); } }
-@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .animate-push { animation: push-in 220ms var(--ease-calm); }
 .animate-fade { animation: fade-in 220ms var(--ease-calm); }
 .animate-sheet { animation: sheet-in var(--spring-ms) var(--ease-spring); }
-.skeleton { background: linear-gradient(90deg, var(--line) 30%, var(--surface-raised) 50%, var(--line) 70%) 0 0 / 300% 100%; animation: shimmer 1400ms ease-in-out infinite; }
+/* the highlight is a layer that slides (compositor only), not an animated background */
+.skeleton { position: relative; overflow: hidden; background: var(--line); }
+.skeleton::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 20%, var(--surface-raised) 50%, transparent 80%); transform: translateX(-100%); animation: shimmer 1400ms ease-in-out infinite; }
 
 /* shared-element transitions (lib/morph.ts) */
 ::view-transition-group(*) { animation-duration: var(--spring-ms); animation-timing-function: var(--ease-spring); }

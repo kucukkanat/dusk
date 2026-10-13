@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useProfile, nameOf, formatNip05 } from "../nostr/profile";
 import { useActivePubkey } from "../state/accounts";
@@ -10,19 +10,23 @@ import { Avatar } from "./primitives";
 export function FollowButton({ pubkey, small }: { pubkey: string; small?: boolean }) {
   const me = useActivePubkey();
   const following = useFollowing(me);
+  // show the result at once; the store catches up (or we fall back to it if the change failed)
+  const [pending, setPending] = useState<boolean | null>(null);
   if (pubkey === me) return null;
-  const on = following.has(pubkey);
+  const on = pending ?? following.has(pubkey);
   return (
     <button
       type="button"
       className={`btn ${on ? "btn-secondary" : "btn-primary"} ${small ? "btn-sm" : ""}`}
       aria-pressed={on}
+      // not `disabled`: that would dim the button we just flipped; taps are ignored while pending
+      aria-disabled={pending !== null}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!requireSignIn()) return;
-        if (on) unfollow(pubkey);
-        else follow(pubkey);
+        if (pending !== null || !requireSignIn()) return;
+        setPending(!on);
+        (on ? unfollow(pubkey) : follow(pubkey)).finally(() => setPending(null));
       }}
     >
       {on ? "Following" : "Follow"}

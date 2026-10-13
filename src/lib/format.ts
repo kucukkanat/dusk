@@ -11,6 +11,12 @@ export function fmtCount(n: number) {
 
 export const sats = (n: number) => Number(n).toLocaleString("en-US");
 
+// formatters are costly to build; make each once
+const shortDate = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const shortDateYear = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+const longDate = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long", day: "numeric" });
+const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
 /** "now", "5m", "3h", "2d", or a date */
 export function ago(ts: number) {
   const s = Math.max(0, Date.now() / 1000 - ts);
@@ -20,7 +26,7 @@ export function ago(ts: number) {
   if (s < 7 * 86400) return Math.round(s / 86400) + "d";
   const d = new Date(ts * 1000);
   const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  return (sameYear ? shortDate : shortDateYear).format(d);
 }
 
 export function agoLong(ts: number) {
@@ -29,11 +35,11 @@ export function agoLong(ts: number) {
   if (s < 3600) return plural(Math.round(s / 60), "minute") + " ago";
   if (s < 86400) return plural(Math.round(s / 3600), "hour") + " ago";
   if (s < 30 * 86400) return plural(Math.round(s / 86400), "day") + " ago";
-  return new Date(ts * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return longDate.format(new Date(ts * 1000));
 }
 
 export function fullDate(ts: number) {
-  return new Date(ts * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return dateTime.format(new Date(ts * 1000));
 }
 
 export function plural(n: number, one: string, many = one + "s") {
