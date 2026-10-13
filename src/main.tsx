@@ -10,6 +10,10 @@ if (import.meta.env.VITE_RELAYS) (window as unknown as { __dusk: unknown }).__du
 
 registerSW({ immediate: true });
 
+// iOS ignores user-scalable=no, so block pinch-zoom directly to keep the app feeling native.
+for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

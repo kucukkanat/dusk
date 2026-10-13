@@ -83,6 +83,7 @@
 
 @layer base {
   html, body, #root { height: 100%; }
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
     margin: 0; overflow: hidden; background: var(--bg); color: var(--ink);
     font: 400 16px/24px var(--font-sans);
