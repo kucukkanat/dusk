@@ -1,16 +1,25 @@
 import { ActionRunner } from "applesauce-actions";
-import { RelayGroup } from "applesauce-relay";
 import type { ActionBuilder } from "applesauce-actions";
 import type { EventSigner } from "applesauce-core";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getSigner, getActivePubkey } from "../state/accounts";
-import { eventStore, pool, uniqRelays, writeRelays$, LOOKUP_RELAYS, DEFAULT_RELAYS } from "./core";
+import { eventStore, quick, uniqRelays, writeRelays$, LOOKUP_RELAYS, DEFAULT_RELAYS } from "./core";
 import { rebroadcast } from "./publish";
 
 /** Pubkeys whose own lists the session has loaded and keeps live (see useSession). */
 const live = new Set<string>();
 export const markLive = (pubkey: string, on: boolean) => (on ? live.add(pubkey) : live.delete(pubkey));
 const isLive = (pubkey: string) => live.has(pubkey);
+
+/** The session's first fetch of a person's own lists, while it's in flight. */
+const syncing = new Map<string, Promise<void>>();
+/** Called by the session when it starts fetching a person's own lists; resolves when it settles. */
+export function markSyncing(pubkey: string, done: Promise<void>) {
+  syncing.set(pubkey, done);
+  done.finally(() => syncing.get(pubkey) === done && syncing.delete(pubkey));
+}
+/** Resolves once the session's first fetch for this person has settled (at once if none is running). */
+export const sessionSynced = (pubkey: string): Promise<void> => syncing.get(pubkey) ?? Promise.resolve();
 
 /** A signer that resolves the active account's signer on demand (unlock or reconnect when needed). */
 export const activeSigner: EventSigner = {
@@ -46,13 +55,32 @@ export const activeSigner: EventSigner = {
   },
 };
 
-const runner = new ActionRunner(eventStore, activeSigner, async (event: NostrEvent, relays?: string[]) => {
-  const silent = event.kind === 1059;
-  await rebroadcast(event, relays?.length ? { only: uniqRelays(relays, silent ? [] : writeRelays$.value), silent } : { silent });
-});
+/** A signer pinned to one account, so an action started before a switch still signs as its owner. */
+function signerFor(pubkey: string): EventSigner {
+  return { ...activeSigner, getPublicKey: async () => pubkey, signEvent: async (t) => (await getSigner(pubkey)).signEvent(t as never) };
+}
+
+// ActionRunner caches its user forever; one per account keeps edits from mixing lists between accounts
+const runners = new Map<string, ActionRunner>();
+function runnerFor(pubkey: string) {
+  let r = runners.get(pubkey);
+  if (!r)
+    runners.set(
+      pubkey,
+      (r = new ActionRunner(eventStore, signerFor(pubkey), async (event: NostrEvent, relays?: string[]) => {
+        const silent = event.kind === 1059;
+        const sent = rebroadcast(event, relays?.length ? { only: uniqRelays(relays, silent ? [] : writeRelays$.value), silent } : { silent });
+        // the runner already put it in the store; relays catch up in the background and failures show in the sync pill
+        if (silent) await sent;
+      })),
+    );
+  return r;
+}
 
 export function runAction<Args extends unknown[]>(builder: ActionBuilder<Args>, ...args: Args) {
-  return runner.run(builder, ...args);
+  const me = getActivePubkey();
+  if (!me) return Promise.reject(new Error("Sign in first"));
+  return runnerFor(me).run(builder, ...args);
 }
 
 /**
@@ -61,23 +89,12 @@ export function runAction<Args extends unknown[]>(builder: ActionBuilder<Args>, 
  */
 export async function ensureLatest(kind: number, pubkey = getActivePubkey(), identifier?: string): Promise<NostrEvent | undefined> {
   if (!pubkey) throw new Error("Sign in first");
-  const relays = uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS);
+  // the session is already fetching these; don't race it with a second request
+  await sessionSynced(pubkey);
   const have = eventStore.getReplaceable(kind, pubkey, identifier);
-  // the session has fetched this and is listening for changes made elsewhere; no need to ask again
-  if (have && isLive(pubkey)) return have;
+  // the session has synced and is listening for changes made elsewhere, so the store is authoritative (even when empty)
+  if (isLive(pubkey)) return have;
   const filter = identifier != null ? { kinds: [kind], authors: [pubkey], "#d": [identifier] } : { kinds: [kind], authors: [pubkey] };
-  // the session keeps this live already; a short check is enough, and settle soon after the first relay answers
-  await new Promise<void>((resolve) => {
-    const complete = RelayGroup.completeOnAny(RelayGroup.completeAfterFirstRelay(have ? 400 : 1200), RelayGroup.completeOnAllEose());
-    const sub = pool.request(relays, filter, { eventStore, timeout: 6000, complete } as never).subscribe({
-      next: (e) => eventStore.add(e),
-      complete: () => resolve(),
-      error: () => resolve(),
-    });
-    setTimeout(() => {
-      sub.unsubscribe();
-      resolve();
-    }, 6500);
-  });
+  await quick(uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS), filter, { settle: have ? 400 : 1200, cap: 4000 });
   return eventStore.getReplaceable(kind, pubkey, identifier);
 }

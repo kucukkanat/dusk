@@ -2,9 +2,9 @@ import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getContacts } from "applesauce-core/helpers/contacts";
 import { getNip10References } from "applesauce-common/helpers/threading";
 import type { Feed } from "../state/settings";
-import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "./core";
+import { eventStore, readRelays$, uniqRelays, cacheRequest, DEFAULT_RELAYS } from "./core";
 import { chunk, loadContactLists, outboxPlan, relaysPlan, type TimelineSpec } from "./timeline";
-import { ensureLatest } from "./actions";
+import { ensureLatest, sessionSynced } from "./actions";
 
 /** People to suggest to someone brand new: long-time Nostr builders and writers. */
 export const SUGGESTED = [
@@ -31,13 +31,35 @@ export function isReply(e: NostrEvent) {
 const topLevel = (e: NostrEvent) => !isReply(e);
 
 export async function myContacts(me: string): Promise<string[]> {
-  let ev = eventStore.getReplaceable(3, me);
-  if (!ev) ev = await ensureLatest(3, me);
-  return ev ? getContacts(ev).map((p) => p.pubkey) : [];
+  const list = (ev = eventStore.getReplaceable(3, me)) => (ev ? getContacts(ev).map((p) => p.pubkey) : null);
+  let have = list();
+  if (have) return have;
+  (await cacheRequest([{ kinds: [3], authors: [me] }])).forEach((e) => eventStore.add(e));
+  if ((have = list())) return have;
+  // the session is fetching it already
+  await sessionSynced(me);
+  return list() ?? list(await ensureLatest(3, me)) ?? [];
 }
 
-/** People followed by the people you follow, most-followed first. */
+const FOF_TTL = 10 * 60_000;
+const fofMemo = new Map<string, { at: number; result: Promise<string[]> }>();
+
+/** People followed by the people you follow, most-followed first. Shared by every screen for ten minutes. */
 export async function friendsOfFriends(me: string, max = 300): Promise<string[]> {
+  let m = fofMemo.get(me);
+  if (!m || Date.now() - m.at > FOF_TTL) {
+    const result = computeFriendsOfFriends(me);
+    fofMemo.set(me, (m = { at: Date.now(), result }));
+    // don't keep a failure (or an empty result from a bad network) around
+    result.then(
+      (l) => !l.length && fofMemo.get(me)?.result === result && fofMemo.delete(me),
+      () => fofMemo.get(me)?.result === result && fofMemo.delete(me),
+    );
+  }
+  return (await m.result).slice(0, max);
+}
+
+async function computeFriendsOfFriends(me: string): Promise<string[]> {
   const follows = await myContacts(me);
   await loadContactLists(follows.slice(0, 600));
   const mine = new Set([me, ...follows]);
@@ -47,7 +69,7 @@ export async function friendsOfFriends(me: string, max = 300): Promise<string[]>
     if (!ev) continue;
     for (const p of getContacts(ev)) if (!mine.has(p.pubkey)) score.set(p.pubkey, (score.get(p.pubkey) ?? 0) + 1);
   }
-  return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, max).map(([p]) => p);
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 300).map(([p]) => p);
 }
 
 export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
@@ -72,7 +94,8 @@ export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
           if (!me) return {};
           const fof = await friendsOfFriends(me);
           if (!fof.length) throw new Error("Couldn't load who your follows follow. Pull to try again.");
-          const plan = await outboxPlan(fof, { kinds: [1, 20] }, { maxRelays: 14 });
+          // one outbox each is enough: the default relays below cover everyone as well
+          const plan = await outboxPlan(fof, { kinds: [1, 20] }, { maxRelays: 12, maxRelaysPerUser: 1 });
           // the big relays carry most people too, and cover anyone whose own relays are slow or gone
           for (const r of DEFAULT_RELAYS) plan[r] = [...(plan[r] ?? []), ...chunk(fof, 150).map((authors) => ({ kinds: [1, 20], authors }))];
           return plan;
@@ -80,7 +103,7 @@ export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
       };
     case "global":
       // your servers plus the big public ones, so there is always something flowing
-      return { key, accept: topLevel, pageSize: 40, plan: async () => relaysPlan(uniqRelays(readRelays$.value, DEFAULT_RELAYS), { kinds: [1, 6, 20] }) };
+      return { key, accept: topLevel, pageSize: 100, plan: async () => relaysPlan(uniqRelays(readRelays$.value, DEFAULT_RELAYS), { kinds: [1, 6, 16, 20, 1068] }) };
     case "tag": {
       const t = (feed.tag ?? "").toLowerCase();
       return { key, plan: async () => relaysPlan(uniqRelays(readRelays$.value, DEFAULT_RELAYS), { kinds: [1, 20, 30023], "#t": [t] }) };
@@ -111,7 +134,7 @@ export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
         },
       };
     case "relay":
-      return { key, accept: topLevel, plan: async () => relaysPlan([feed.relay ?? DEFAULT_RELAYS[0]], { kinds: [1, 6, 20] }) };
+      return { key, accept: topLevel, plan: async () => relaysPlan([feed.relay ?? DEFAULT_RELAYS[0]], { kinds: [1, 6, 16, 20, 1068] }) };
     case "set":
       return {
         key,

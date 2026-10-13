@@ -9,6 +9,7 @@ import { WalletConnect } from "applesauce-wallet-connect";
 import { NostrIDB, openDB } from "nostr-idb";
 import { verifyEvent, verifiedSymbol } from "nostr-tools/pure";
 import { BehaviorSubject, Observable, takeUntil, timer } from "rxjs";
+import { getActivePubkey } from "../state/accounts";
 
 /** Build-time override (VITE_RELAYS=ws://localhost:7777) so the app can run against a local test relay. */
 const OVERRIDE = (import.meta.env.VITE_RELAYS as string | undefined)?.split(",").filter(Boolean);
@@ -96,7 +97,7 @@ export const writeRelays$ = new BehaviorSubject<string[]>(DEFAULT_RELAYS);
 let cache: NostrIDB | null = null;
 const cacheReady = openDB("dusk")
   .then((db) => {
-    cache = new NostrIDB(db);
+    cache = new NostrIDB(db, { maxEvents: 30000 });
     return cache.start().then(() => cache);
   })
   .catch((e) => {
@@ -106,10 +107,21 @@ const cacheReady = openDB("dusk")
 
 /** Kinds that are cheap to keep and expensive to refetch. */
 const CACHED_KINDS = new Set([0, 3, 5, 10000, 10002, 10003, 10050, 10063, 30000, 30023, 30311, 31922, 31923, 30009, 39089, 1, 6, 7, 16, 1068, 9735, 20, 1111]);
+/** Kinds only worth keeping when they're about the signed-in user (the rest is a firehose). */
+const MINE_ONLY = new Set([6, 7, 16, 9735]);
+
+function worthCaching(event: NostrEvent) {
+  if (!CACHED_KINDS.has(event.kind)) return false;
+  const me = getActivePubkey();
+  // other people's follow lists are big and only needed on demand
+  if (event.kind === 3) return event.pubkey === me;
+  if (MINE_ONLY.has(event.kind)) return !!me && event.tags.some((t) => t[0] === "p" && t[1] === me);
+  return true;
+}
 
 eventStore.insert$.subscribe((event) => {
   // events read back from the cache are already there; writing them again re-indexes every tag
-  if (!CACHED_KINDS.has(event.kind) || isFromCache(event)) return;
+  if (isFromCache(event) || !worthCaching(event)) return;
   cacheReady.then((c) => c?.add(event as never)).catch(() => {});
 });
 
@@ -143,13 +155,18 @@ export async function clearCache() {
 
 /* ---------- missing-event loader ---------- */
 
-createEventLoaderForStore(eventStore, pool, {
-  cacheRequest,
-  lookupRelays: LOOKUP_RELAYS,
-  extraRelays: readRelays$,
-  followRelayHints: true,
-  bufferTime: 400,
-});
+/** Kinds the indexers carry for everyone; ask them alongside read relays instead of after. */
+const INDEXED_KINDS = new Set([0, 3, 10002]);
+
+// the loader runs its steps one after another; each must end quickly or a dead hint stalls the rest
+createEventLoaderForStore(
+  eventStore,
+  (relays: string[], filters: Filter[]) => {
+    const indexed = filters.every((f) => f.kinds?.length && f.kinds.every((k) => INDEXED_KINDS.has(k)));
+    return quick$(indexed ? uniqRelays(relays, LOOKUP_RELAYS) : relays, filters, { settle: 800, cap: 2500 });
+  },
+  { cacheRequest, lookupRelays: LOOKUP_RELAYS, extraRelays: readRelays$, followRelayHints: true, bufferTime: 400 },
+);
 
 /** Normalise a relay URL so duplicates compare equal. */
 export function normalizeRelay(url: string): string | null {

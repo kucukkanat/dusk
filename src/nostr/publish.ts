@@ -2,7 +2,7 @@ import type { EventTemplate, NostrEvent } from "applesauce-core/helpers/event";
 import { create } from "zustand";
 import type { PublishResponse } from "applesauce-relay";
 import { signEvent } from "../state/accounts";
-import { eventStore, pool, uniqRelays, writeRelays$, now } from "./core";
+import { eventStore, pool, uniqRelays, writeRelays$, now, healthy } from "./core";
 import { inboxesOf } from "./relays";
 
 type Outgoing = { id: string; kind: number; state: "sending" | "failed"; error?: string; event: NostrEvent; relays: string[] };
@@ -25,19 +25,34 @@ export type PublishOptions = {
   silent?: boolean;
 };
 
+/** Lists name people without addressing them; tagging them is no reason to write to their inboxes. */
+const LIST_KINDS = new Set([3, 10000, 10001, 10002, 10003, 10050, 10063, 30000, 30002, 30003]);
+/** Reactions and reposts tag a whole thread; only the author of the target needs to hear about it. */
+const TARGET_KINDS = new Set([6, 7, 16]);
+const MAX_RELAYS = 8;
+
+function notifyWho(event: NostrEvent): string[] {
+  if (LIST_KINDS.has(event.kind)) return [];
+  const ps = event.tags.filter((t) => t[0] === "p" && t[1]?.length === 64).map((t) => t[1]);
+  if (TARGET_KINDS.has(event.kind)) {
+    const id = event.tags.filter((t) => t[0] === "e").at(-1)?.[1];
+    const author = id ? eventStore.getEvent(id)?.pubkey : undefined;
+    const who = author && ps.includes(author) ? author : ps.at(-1);
+    return who && who !== event.pubkey ? [who] : [];
+  }
+  return [...new Set(ps)].filter((p) => p !== event.pubkey).slice(0, 12);
+}
+
 async function sendEvent(event: NostrEvent, opts: PublishOptions = {}) {
   let relays: string[];
-  if (opts.only) relays = uniqRelays(opts.only);
+  if (opts.only) relays = healthy(uniqRelays(opts.only));
   else {
-    relays = [...writeRelays$.value, ...(opts.relays ?? [])];
-    if (opts.notifyTagged !== false) {
-      const tagged = [...new Set(event.tags.filter((t) => t[0] === "p" && t[1]?.length === 64).map((t) => t[1]))]
-        .filter((p) => p !== event.pubkey)
-        .slice(0, 12);
-      const inboxes = await Promise.all(tagged.map((p) => inboxesOf(p, 1500).then((r) => r.slice(0, 3))));
-      relays.push(...inboxes.flat());
-    }
-    relays = uniqRelays(relays);
+    const write = healthy(uniqRelays(writeRelays$.value));
+    const tagged = opts.notifyTagged !== false ? notifyWho(event) : [];
+    const inboxes = await Promise.all(tagged.map((p) => inboxesOf(p, 1500).then((r) => healthy(r).slice(0, 2))));
+    // our own relays first, then one inbox per tagged person, then whatever fits
+    const firsts = inboxes.map((r) => r[0]).filter(Boolean);
+    relays = uniqRelays(write.slice(0, 4), opts.relays, firsts, ...inboxes, write).slice(0, MAX_RELAYS);
   }
   if (!opts.silent) setItem({ id: event.id, kind: event.kind, state: "sending", event, relays }, event.id);
   try {

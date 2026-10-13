@@ -1,7 +1,7 @@
 import { getProfileContent } from "applesauce-core/helpers/profile";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getContacts } from "applesauce-core/helpers/contacts";
-import { eventStore, pool, SEARCH_RELAYS } from "./core";
+import { eventStore, healthy, quick$, SEARCH_RELAYS } from "./core";
 import { getActivePubkey } from "../state/accounts";
 import { nameOf } from "./profile";
 
@@ -30,23 +30,18 @@ export function searchLocalProfiles(q: string, limit = 8): string[] {
     .map(([p]) => p);
 }
 
-/** NIP-50 search on relays that support it. */
+/** NIP-50 search on relays that support it. Results stream through `onEvent` as they arrive. */
 export function searchRelays(q: string, kinds: number[], limit = 40, onEvent?: (e: NostrEvent) => void): Promise<NostrEvent[]> {
   const out: NostrEvent[] = [];
   return new Promise((resolve) => {
-    const sub = pool.request(SEARCH_RELAYS, { kinds, search: q, limit }, { eventStore, timeout: 7000 } as never).subscribe({
+    quick$(healthy(SEARCH_RELAYS), { kinds, search: q, limit }, { settle: 1000, cap: 7000 }).subscribe({
       next: (e) => {
-        const s = eventStore.add(e) ?? e;
-        out.push(s);
-        onEvent?.(s);
+        out.push(e);
+        onEvent?.(e);
       },
       complete: () => resolve(out),
       error: () => resolve(out),
     });
-    setTimeout(() => {
-      sub.unsubscribe();
-      resolve(out);
-    }, 7500);
   });
 }
 
