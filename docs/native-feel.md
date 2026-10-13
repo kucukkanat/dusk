@@ -79,6 +79,7 @@ What Dusk does so the installed PWA feels like an app rather than a web page. â˜
 - **"New notes" pill** instead of pushing content under the reader. Tapping it reveals the new notes and scrolls to the top.
 - **Infinite scroll** with an `IntersectionObserver` 800px ahead.
 - **Floating compose button** on phones.
+- â˜… **New post from anywhere**: a "New post" nav item opens the composer over the current screen, so you don't have to go back to Home. Nav items can be actions (`action` on `NavItem`) as well as routes. It defaults to the More menu, and Edit dock can move it into the dock. The sidebar has its own New note button, so the item is skipped there (`RAIL_SKIP`).
 
 ## Motion
 

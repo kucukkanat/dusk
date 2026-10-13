@@ -64,7 +64,7 @@ const DEFAULTS: Settings = {
   activeFeed: "following",
   onboarded: false,
   rail: { order: ["home", "search", "activity", "messages", "me", "bookmarks", "lists", "drafts", "settings"], hidden: ["drafts"], lists: true },
-  dock: { order: ["home", "search", "activity", "messages", "me", "bookmarks", "lists", "drafts", "settings"] },
+  dock: { order: ["home", "search", "activity", "messages", "me", "bookmarks", "lists", "drafts", "settings", "post"] },
 };
 
 type SettingsStore = Settings & {

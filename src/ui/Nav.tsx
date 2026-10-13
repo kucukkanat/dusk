@@ -14,7 +14,8 @@ import { Icon, type IconName } from "./Icon";
 import { Avatar } from "./primitives";
 import { Slider } from "./Slider";
 
-export type NavItem = { id: string; to: string; icon: IconName; label: string; end?: boolean };
+/** A destination (`to`), or an action that opens something in place (`action`, e.g. the composer). */
+export type NavItem = { id: string; to: string; icon: IconName; label: string; end?: boolean; action?: () => void };
 
 export const NAV_ITEMS: Record<string, NavItem> = {
   home: { id: "home", to: "/", icon: "home", label: "Home", end: true },
@@ -26,7 +27,11 @@ export const NAV_ITEMS: Record<string, NavItem> = {
   lists: { id: "lists", to: "/lists", icon: "list", label: "Lists" },
   drafts: { id: "drafts", to: "/drafts", icon: "draft", label: "Drafts" },
   settings: { id: "settings", to: "/settings", icon: "settings", label: "Settings" },
+  post: { id: "post", to: "", icon: "plus", label: "New post", action: () => openCompose({}) },
 };
+
+/** The sidebar has its own New note button, so actions only appear in the dock and More. */
+const RAIL_SKIP = new Set(["post"]);
 
 
 function useUnreadCounts() {
@@ -106,7 +111,7 @@ export function Rail() {
   const lists = useMyLists().filter((e) => e.kind === 30000 || e.kind === 39089);
   const ref = useRef<HTMLDivElement>(null);
   const order = [...rail.order, ...Object.keys(NAV_ITEMS).filter((k) => !rail.order.includes(k))];
-  const items = order.filter((id) => NAV_ITEMS[id] && !rail.hidden.includes(id));
+  const items = order.filter((id) => NAV_ITEMS[id] && !rail.hidden.includes(id) && !RAIL_SKIP.has(id));
   const currentFeed = feeds.find((f) => f.id === activeFeed);
   const activeList = loc.pathname === "/" && currentFeed?.src === "set" ? currentFeed.set : undefined;
   const active = activeList ? "" : activeId(loc.pathname, items);
@@ -195,6 +200,15 @@ export function TabBar() {
       {shown.map((id) => {
         const it = NAV_ITEMS[id];
         const on = id === active;
+        if (it.action)
+          return (
+            <button key={id} type="button" data-active={false} className={tab(false)} onClick={it.action}>
+              <span data-pill className={pill(false)}>
+                <Icon name={it.icon} />
+              </span>
+              {it.label}
+            </button>
+          );
         return (
           <NavLink key={id} to={it.to} end={it.end} data-active={on} className={tab(on)} onClick={() => on && loc.pathname === it.to && scrollToTop()}>
             <span data-pill className={pill(on)}>
@@ -230,6 +244,13 @@ function MoreDrawer({ items }: { items: string[] }) {
       <h2 className="mb-1 text-xl font-semibold">More</h2>
       {items.map((id) => {
         const it = NAV_ITEMS[id];
+        if (it.action)
+          return (
+            <button key={id} type="button" className={row} onClick={() => (closeSheet(), it.action!())}>
+              <Icon name={it.icon} className="text-muted" />
+              {it.label}
+            </button>
+          );
         return (
           <NavLink key={id} to={it.to} end={it.end} className={`${row} ${hit === id ? "bg-wash" : ""}`} onClick={() => closeSheet()}>
             <Icon name={it.icon} className="text-muted" />
@@ -275,7 +296,7 @@ function EditNav({ initial }: { initial: "rail" | "dock" }) {
   const dock = useSettings((s) => s.dock);
   const set = useSettings((s) => s.set);
   const isDock = mode === "dock";
-  const order = fullOrder(isDock ? dock.order : rail.order);
+  const order = fullOrder(isDock ? dock.order : rail.order).filter((id) => isDock || !RAIL_SKIP.has(id));
   const save = (patch: Partial<typeof rail>) => {
     if (isDock) set({ dock: { order: patch.order ?? order } });
     else set({ rail: { ...rail, order, ...patch } });
