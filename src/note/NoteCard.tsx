@@ -212,7 +212,8 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
     );
   }
 
-  const stranger = me ? !following.has(event.pubkey) && event.pubkey !== me : true;
+  // guests have no follows to judge by, so only "always blur" applies to them
+  const stranger = me ? following.size > 0 && !following.has(event.pubkey) && event.pubkey !== me : false;
   const blur = settings.blurMedia === "always" || (settings.blurMedia === "strangers" && stranger) || !!cw;
   const run = (a: SwipeAction) => () => {
     if (a !== "bookmark" && a !== "mute" && !requireSignIn()) return;
