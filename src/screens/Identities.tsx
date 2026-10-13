@@ -72,7 +72,7 @@ function More({ a }: { a: Account }) {
             replaceSheet(
               <div className="grid gap-3">
                 <h2 className="text-xl font-semibold">Remove {nameOf(p, a.pubkey)} from this device?</h2>
-                <p className="text-[15px] text-muted">{a.type === "key" ? "The encrypted key is deleted from this device. You'll need your backup to sign in again." : "You can sign in again any time with your signer."}</p>
+                <p className="text-[15px] text-muted">{a.type === "key" ? "The key is deleted from this browser. You'll need your backup to sign in again." : "You can sign in again any time with your signer."}</p>
                 <button
                   type="button"
                   className="btn btn-danger btn-lg"
@@ -139,7 +139,7 @@ export function Identities() {
           Add identity
         </button>
       </div>
-      <p className="px-4 pt-3 text-[13px] text-muted">Keys stay in your signer, your browser extension, or encrypted on this device. Dusk never uploads them.</p>
+      <p className="px-4 pt-3 text-[13px] text-muted">Keys stay in your signer, your browser extension, or in this browser. Dusk never uploads them.</p>
     </Screen>
   );
 }

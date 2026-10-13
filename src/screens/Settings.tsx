@@ -4,7 +4,9 @@ import { use$ } from "applesauce-react/hooks";
 import { getInboxes, getOutboxes } from "applesauce-core/helpers/mailboxes";
 import { getBlossomServersFromList } from "applesauce-common/helpers/blossom";
 import { useSettings, type SwipeAction } from "../state/settings";
-import { useActivePubkey, useActiveAccount, useAccounts, lockAccount, getSigner } from "../state/accounts";
+import { useActivePubkey, useActiveAccount, useAccounts, lockAccount, getSigner, encryptKey } from "../state/accounts";
+import { nsecEncode } from "nostr-tools/nip19";
+import { hexToBytes } from "@noble/hashes/utils.js";
 import { eventStore, normalizeRelay, uniqRelays, DEFAULT_RELAYS, clearCache, LOOKUP_RELAYS } from "../nostr/core";
 import { ensureLatest } from "../nostr/actions";
 import { publish } from "../nostr/publish";
@@ -690,12 +692,12 @@ function Account() {
   const nav = useNavigate();
   const remove = useAccounts((s) => s.remove);
   if (!account) return <Empty title="Not signed in" />;
-  const signer = { extension: "Browser extension", bunker: "Remote signer · your key stays in your signer app", key: "Key on this device · encrypted with your password" }[account.type];
+  const signer = { extension: "Browser extension", bunker: "Remote signer · your key stays in your signer app", key: "Key kept in this browser" }[account.type];
   return (
     <>
       <Group label="Signing">
         <Row icon="key" title="Signed in with" sub={signer} />
-        {account.type === "key" && <Row icon="lock" title="Back up your key" sub="Export it to keep somewhere safe" onClick={() => openSheet(<Backup />, { label: "Back up your key" })} />}
+        {account.type === "key" && <Row icon="lock" title="Back up your key" sub="Show or export your private key" onClick={() => openSheet(<Backup />, { label: "Back up your key" })} />}
         {account.type === "bunker" && (
           <Row
             icon="refresh"
@@ -708,7 +710,6 @@ function Account() {
             }}
           />
         )}
-        {account.type === "key" && <Row icon="lock" title="Lock now" sub="Ask for your password again" onClick={() => (lockAccount(me), toast("Locked"))} />}
       </Group>
       <Group label="Public key" help="Share this so people can find you. It is safe to share.">
         <div className="flex items-center gap-2 px-4 py-3">
@@ -723,7 +724,7 @@ function Account() {
           type="button"
           className="btn btn-danger btn-lg"
           onClick={() => {
-            if (!confirm(account.type === "key" ? "Sign out and remove the key from this device? Make sure you have a backup." : "Sign out of this identity on this device?")) return;
+            if (!confirm(account.type === "key" ? "Sign out and remove the key from this browser? Make sure you have a backup." : "Sign out of this identity on this device?")) return;
             lockAccount(me);
             remove(me);
             nav("/");
@@ -740,38 +741,36 @@ function Account() {
 
 function Backup() {
   const account = useActiveAccount();
-  const [pw, setPw] = useState("");
   const [shown, setShown] = useState<string | null>(null);
-  const [mode, setMode] = useState<"ncryptsec" | "nsec">("ncryptsec");
+  const [pw, setPw] = useState("");
+  const [mode, setMode] = useState<"nsec" | "ncryptsec">("nsec");
   if (!account || account.type !== "key") return null;
+  if (!account.secret) return <p className="text-[15px] text-muted">Use your key once (post or react) so Dusk can open it, then come back here.</p>;
+  const sk = hexToBytes(account.secret);
   return (
     <div className="grid gap-3">
       <h2 className="text-xl font-semibold">Back up your key</h2>
-      <p className="text-[15px] text-muted">An encrypted key (ncryptsec) is safest to store: it needs your password to use. A plain key (nsec) works anywhere but anyone who sees it can post as you.</p>
-      <ChipSet options={[["ncryptsec", "Encrypted"], ["nsec", "Plain nsec"]]} value={mode} onChange={(v) => (setMode(v), setShown(null))} />
-      {mode === "ncryptsec" && !shown && (
-        <button type="button" className="btn btn-primary" onClick={() => setShown(account.ncryptsec!)}>
-          Show encrypted key
-        </button>
-      )}
+      <p className="text-[15px] text-muted">Your private key (nsec) is your account. Anyone who sees it can post as you. An encrypted copy (ncryptsec) needs a password you choose, which makes it safer to store.</p>
+      <ChipSet options={[["nsec", "Private key"], ["ncryptsec", "Encrypted copy"]]} value={mode} onChange={(v) => (setMode(v), setShown(null))} />
       {mode === "nsec" && !shown && (
+        <>
+          <Warn>Only reveal it on a device nobody is watching.</Warn>
+          <button type="button" className="btn btn-danger" onClick={() => setShown(nsecEncode(sk))}>
+            Reveal private key
+          </button>
+        </>
+      )}
+      {mode === "ncryptsec" && !shown && (
         <form
           className="grid gap-2"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            try {
-              const { decrypt } = await import("nostr-tools/nip49");
-              const { nsecEncode } = await import("nostr-tools/nip19");
-              setShown(nsecEncode(decrypt(account.ncryptsec!, pw)));
-            } catch {
-              toast("Wrong password", { tone: "error" });
-            }
+            if (pw.length >= 8) setShown(encryptKey(sk, pw));
           }}
         >
-          <Warn>Only do this on a device nobody is watching.</Warn>
-          <input className="field" type="password" placeholder="Your password" value={pw} onChange={(e) => setPw(e.target.value)} />
-          <button type="submit" className="btn btn-danger" disabled={!pw}>
-            Reveal private key
+          <input className="field" type="password" autoComplete="new-password" placeholder="Choose a password (8+ characters)" value={pw} onChange={(e) => setPw(e.target.value)} />
+          <button type="submit" className="btn btn-primary" disabled={pw.length < 8}>
+            Create encrypted copy
           </button>
         </form>
       )}

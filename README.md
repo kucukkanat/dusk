@@ -17,7 +17,7 @@ Dusk talks to real Nostr relays. It follows the outbox model (NIP-65): each pers
 - **Private messages (NIP-17):** gift-wrapped chats, message requests, encrypted photos, reactions, your message servers (kind 10050)
 - **Lists (NIP-51):** private mute list (people, words, tags, threads), private bookmarks, follow sets, follow packs
 - **Zaps (NIP-57):** Nostr Wallet Connect (NIP-47), WebLN, or an invoice QR for any wallet; one-tap zaps
-- **Sign in:** browser extension (NIP-07), remote signer (NIP-46: `bunker://` or scan a `nostrconnect://` QR with Amber or nsec.app), or a key kept on the device encrypted with a password (NIP-49). Create a new account with 12 seed words (NIP-06). Several identities you can switch between
+- **Sign in:** browser extension (NIP-07), remote signer (NIP-46: `bunker://` or scan a `nostrconnect://` QR with Amber or nsec.app), or a private key kept in the browser (export it as an nsec or an encrypted ncryptsec, NIP-49). Create a new account with 12 seed words (NIP-06). Several identities you can switch between
 - **Long reads (NIP-23)** with Markdown, **live streams (NIP-53)** with chat, **calendar events (NIP-52)** with RSVP, **request to vanish (NIP-62)**, reports (NIP-56), deletions (NIP-09), search (NIP-50)
 - **Safety:** web-of-trust filtering of replies and activity, mutes everywhere
 - **PWA:** offline shell, local cache of notes and profiles (IndexedDB), share target, `web+nostr:` link handler, system notifications while open
@@ -55,7 +55,7 @@ Pushing to `main` builds and deploys to GitHub Pages through `.github/workflows/
 
 ## Privacy notes
 
-- Keys kept on the device are stored encrypted (NIP-49) in local storage and unlocked with your password per session.
+- A private key you sign in with is kept in this browser's local storage without a password, so Dusk doesn't ask for one on every visit. Prefer an extension or a remote signer on shared devices.
 - Decrypted direct messages are cached in IndexedDB on this device so they don't need decrypting again. Clear them in Settings › Advanced.
 - A Nostr Wallet Connect string is stored in local storage on this device only.
 - Link previews are not fetched, so opening a note never contacts the linked site.

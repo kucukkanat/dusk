@@ -4,7 +4,7 @@ import { decode } from "nostr-tools/nip19";
 import { decrypt as nip49decrypt } from "nostr-tools/nip49";
 import { privateKeyFromSeedWords, validateWords } from "nostr-tools/nip06";
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { useAccounts, setSigner, encryptKey } from "./accounts";
+import { useAccounts, setSigner } from "./accounts";
 import { useSettings } from "./settings";
 import { publish } from "../nostr/publish";
 import { DEFAULT_RELAYS, now } from "../nostr/core";
@@ -65,19 +65,19 @@ export function parseSecret(input: string, password?: string): Uint8Array {
   throw new Error("That doesn't look like a private key, encrypted key or seed words");
 }
 
-export function loginKey(input: string, password: string) {
-  if (password.length < 8) throw new Error("Use a password of at least 8 characters");
+/** Sign in with a key kept on this device. `password` is only needed to open an ncryptsec. */
+export function loginKey(input: string, password?: string) {
   const sk = parseSecret(input, password);
   const pubkey = getPublicKey(sk);
   setSigner(pubkey, new PrivateKeySigner(sk));
-  useAccounts.getState().add({ pubkey, type: "key", ncryptsec: encryptKey(sk, password), added: now() });
+  useAccounts.getState().add({ pubkey, type: "key", secret: Buffer_hex(sk), added: now() });
   return finish(pubkey);
 }
 
 /** Create a brand new identity from seed words, publish a profile, relay lists and first follows. */
-export async function createAccount(opts: { words: string; password: string; name: string; about?: string; follows: string[] }) {
+export async function createAccount(opts: { words: string; name: string; about?: string; follows: string[] }) {
   const sk = privateKeyFromSeedWords(opts.words);
-  const pubkey = loginKey(Buffer_hex(sk), opts.password);
+  const pubkey = loginKey(Buffer_hex(sk));
   const relayTags = DEFAULT_RELAYS.map((r) => ["r", r]);
   await Promise.allSettled([
     publish({ kind: 0, content: JSON.stringify({ name: opts.name, display_name: opts.name, about: opts.about ?? "" }) }),

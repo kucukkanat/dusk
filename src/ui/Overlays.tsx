@@ -178,7 +178,7 @@ export function UnlockPrompt() {
           <div>
             <h2 className="text-xl font-semibold">Unlock your key</h2>
             <p className="caption">
-              <Name pubkey={req.pubkey} /> · kept encrypted on this device
+              <Name pubkey={req.pubkey} /> · one-time unlock; after this Dusk won't ask again
             </p>
           </div>
         </div>

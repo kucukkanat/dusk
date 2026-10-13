@@ -58,7 +58,6 @@ export function Onboarding() {
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const words = useMemo(() => generateSeedWords(), []);
-  const [password, setPassword] = useState("");
   const [saved, setSaved] = useState(false);
   const [picks, setPicks] = useState<Set<string>>(new Set(SUGGESTED.slice(0, 4)));
   const [busy, setBusy] = useState(false);
@@ -136,13 +135,9 @@ export function Onboarding() {
         <label className="flex items-center gap-3 text-[15px]">
           <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="size-5" />I wrote them down somewhere safe
         </label>
-        <Field label="Password for this device" help="Dusk keeps your key encrypted on this device. You'll type this to unlock it.">
-          <input className="field" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
-        <button type="button" className="btn btn-primary btn-lg" disabled={!saved || password.length < 8} onClick={() => go("follows")}>
+        <button type="button" className="btn btn-primary btn-lg" disabled={!saved} onClick={() => go("follows")}>
           Continue
         </button>
-        {password && password.length < 8 && <p className="caption -mt-2">At least 8 characters.</p>}
       </Shell>
     );
 
@@ -163,7 +158,7 @@ export function Onboarding() {
           onClick={async () => {
             setBusy(true);
             try {
-              await createAccount({ words, password, name: name.trim(), about: about.trim(), follows: [...picks] });
+              await createAccount({ words, name: name.trim(), about: about.trim(), follows: [...picks] });
               closeOnboarding();
               toast("Welcome to Dusk");
             } catch (e) {
@@ -307,17 +302,19 @@ export function SignIn({ embedded, onDone }: { embedded?: boolean; onDone?: () =
         {mode === "extension" && <p className="caption">{ext ? "Dusk will ask your extension for permission." : "Install a Nostr extension such as Alby or nos2x, then reload."}</p>}
         {mode === "key" && (
           <>
-            <Warn>Anyone who sees this key can post as you. Dusk stores it encrypted on this device only.</Warn>
+            <Warn>Anyone who sees this key can post as you. Dusk keeps it in this browser only, without a password, so use this only on a device you trust.</Warn>
             <Field label="Private key" help="nsec1…, ncryptsec1… or your seed words" error={err}>
               <input className="field key" type="password" placeholder="nsec1…" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} />
             </Field>
-            <Field label="Password for this device" help="At least 8 characters. For an ncryptsec, use its password.">
-              <input className="field" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </Field>
+            {value.trim().startsWith("ncryptsec1") && (
+              <Field label="Password for this encrypted key">
+                <input className="field" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+            )}
           </>
         )}
         {err && mode === "extension" && <p className="text-[13px] text-clay-ink">{err}</p>}
-        <button type="submit" className="btn btn-primary btn-lg" disabled={busy || (mode === "extension" && !ext) || (mode === "remote" && !value.trim()) || (mode === "key" && (!value || password.length < 8))}>
+        <button type="submit" className="btn btn-primary btn-lg" disabled={busy || (mode === "extension" && !ext) || (mode === "remote" && !value.trim()) || (mode === "key" && (!value.trim() || (value.trim().startsWith("ncryptsec1") && !password)))}>
           {busy ? "Connecting…" : "Continue"}
         </button>
       </form>

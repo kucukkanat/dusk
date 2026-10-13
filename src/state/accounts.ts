@@ -5,6 +5,7 @@ import { ExtensionSigner, NostrConnectSigner, PrivateKeySigner } from "applesauc
 import type { ISigner } from "applesauce-signers";
 import { decrypt as nip49decrypt, encrypt as nip49encrypt } from "nostr-tools/nip49";
 import { requestUnlock } from "./ui";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 export type AccountType = "extension" | "bunker" | "key";
 export type Account = {
@@ -12,7 +13,9 @@ export type Account = {
   type: AccountType;
   /** nbunksec for bunker sessions */
   nbunksec?: string;
-  /** NIP-49 encrypted key for keys kept on this device */
+  /** Hex private key kept on this device */
+  secret?: string;
+  /** Older accounts: NIP-49 encrypted key, converted to `secret` on first unlock */
   ncryptsec?: string;
   added: number;
 };
@@ -74,12 +77,15 @@ async function buildSigner(a: Account): Promise<ISigner> {
     if (!a.nbunksec) throw new Error("Missing remote signer session");
     return NostrConnectSigner.fromNbunksec(a.nbunksec);
   }
+  if (a.secret) return new PrivateKeySigner(hexToBytes(a.secret));
   if (!a.ncryptsec) throw new Error("Missing key");
   for (let tries = 0; tries < 3; tries++) {
     const pw = await requestUnlock(a.pubkey);
     if (pw == null) throw new Error("Locked");
     try {
       const sk = nip49decrypt(a.ncryptsec, pw);
+      // one-time migration: keep the key without a password from now on
+      useAccounts.setState((s) => ({ accounts: s.accounts.map((x) => (x.pubkey === a.pubkey ? { ...x, secret: bytesToHex(sk), ncryptsec: undefined } : x)) }));
       return new PrivateKeySigner(sk);
     } catch {
       /* wrong password; ask again */
@@ -124,7 +130,7 @@ export async function lockAccount(pubkey: string) {
   signers.delete(pubkey);
 }
 
-/** Encrypt a raw key for storage on this device. */
+/** Encrypt a key for export (NIP-49). */
 export function encryptKey(sk: Uint8Array, password: string) {
   return nip49encrypt(sk, password, 16, 0x01);
 }
