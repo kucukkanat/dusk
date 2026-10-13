@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Icon } from "./Icon";
 import { SyncPill } from "./SyncPill";
+import { morphBack } from "../lib/morph";
 import { openCompose } from "../sheets/Compose";
 
 type Props = {
@@ -27,7 +28,7 @@ const scrollMem = new Map<string, number>();
 export function useBack() {
   const nav = useNavigate();
   return () => {
-    if (window.history.state && window.history.state.idx > 0) nav(-1);
+    if (window.history.state && window.history.state.idx > 0) morphBack(() => nav(-1));
     else nav("/");
   };
 }
@@ -41,8 +42,8 @@ export function Screen({ title, titleNode, back, actions, sub, footer, fab, onRe
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  // restore and remember scroll position per screen
-  useEffect(() => {
+  // restore and remember scroll position per screen (before paint, so a morph back lands in place)
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (chat) el.scrollTop = el.scrollHeight;

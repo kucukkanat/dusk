@@ -239,7 +239,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
   const open = (el?: Element) => {
     if (focus || preview) return;
     if (window.getSelection()?.toString()) return;
-    morph(() => nav(eventPath(event)), { from: el, key: "note:" + event.id, kind: "morph-card" });
+    morph(() => nav(eventPath(event)), { from: el, key: "note:" + event.id, kind: "morph-card", back: () => document.querySelector(`article[data-note="${event.id}"]`) });
   };
 
   const body: ReactNode = hasKindBody(event.kind) ? (
@@ -258,6 +258,7 @@ function Note({ event, by, focus, inThread, preview, isNew, showMuted }: { event
       data-note={event.id}
       className={`grid cursor-pointer grid-cols-[40px_1fr] gap-3 bg-surface px-4 outline-offset-[-2px] ${settings.density === "compact" ? "py-3" : "py-4"} ${isNew ? "animate-fade" : ""} ${focus ? "cursor-default" : ""}`}
       ref={focus ? morphTarget("note:" + event.id) : undefined}
+      data-morph={focus ? "note:" + event.id : undefined}
       onClick={(e) => open(e.currentTarget)}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open(e.currentTarget)}
     >

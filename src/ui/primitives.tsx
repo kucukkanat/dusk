@@ -19,6 +19,7 @@ export function Avatar({ pubkey, size = "md", ring, className = "", morphKey }: 
   return (
     <span
       ref={morphKey ? morphTarget(morphKey) : undefined}
+      data-morph={morphKey}
       className={`relative inline-grid flex-none place-items-center overflow-hidden rounded-full font-semibold text-on-accent ${SIZE[size]} ${show ? "bg-raised" : TONE_BG[toneOf(pubkey)]} ${ring ? "shadow-[0_0_0_2px_var(--bg),0_0_0_4px_var(--lilac)]" : ""} ${className}`}
       aria-hidden="true"
     >
@@ -35,12 +36,15 @@ export function AvatarLink({ pubkey, size = "md", className }: { pubkey: string;
     <Link
       to={to}
       aria-label={"View " + nameOf(p, pubkey)}
+      data-avatar={pubkey}
       className={"rounded-full " + (className ?? "")}
       onClick={(e) => {
         e.stopPropagation();
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
         e.preventDefault();
-        morph(() => nav(to), { from: e.currentTarget.firstElementChild, key: "avatar:" + pubkey });
+        const note = e.currentTarget.closest("[data-note]")?.getAttribute("data-note");
+        const find = () => (note && document.querySelector(`[data-note="${note}"] [data-avatar="${pubkey}"] > span`)) || document.querySelector(`[data-avatar="${pubkey}"] > span`);
+        morph(() => nav(to), { from: e.currentTarget.firstElementChild, key: "avatar:" + pubkey, back: find });
       }}
     >
       <Avatar pubkey={pubkey} size={size} />
