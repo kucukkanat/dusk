@@ -20,9 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
-      - name: Check scripts
-        run: bun run check
-      - name: Build
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Typecheck and build
         run: bun run build
       - uses: actions/configure-pages@v5
         with:

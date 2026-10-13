@@ -1,13 +1,49 @@
 {
   "name": "dusk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A calm Nostr client. Mobile-first PWA prototype.",
+  "description": "A calm Nostr client. Mobile-first PWA.",
   "type": "module",
   "scripts": {
-    "build": "bun build.js",
-    "dev": "bun build.js && bunx serve dist",
-    "check": "node --check src/js/app.js && node --check src/js/dusk.js && node --check src/sw.js"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check": "tsc -b"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@scure/base": "^2.4.0",
+    "applesauce-actions": "^6.2.0",
+    "applesauce-common": "^6.2.0",
+    "applesauce-content": "^6.2.0",
+    "applesauce-core": "^6.2.0",
+    "applesauce-loaders": "^6.2.0",
+    "applesauce-react": "^6.0.0",
+    "applesauce-relay": "^6.2.1",
+    "applesauce-signers": "^6.2.3",
+    "applesauce-wallet-connect": "^6.2.0",
+    "blurhash": "^2.0.5",
+    "dompurify": "^3.4.17",
+    "hls.js": "^1.7.3",
+    "marked": "^18.1.1",
+    "nostr-idb": "^5.1.0",
+    "nostr-tools": "^2.25.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0",
+    "rxjs": "^7.8.2",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0"
+  }
 }

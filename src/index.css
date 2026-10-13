@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* Dusk design tokens: Night (default) and Dawn themes. Raw values live on :root so the
+   theme and accent can switch at runtime; @theme inline maps them to Tailwind utilities. */
+:root {
+  color-scheme: dark;
+  --bg: #14151a; --surface: #1b1d23; --surface-raised: #23252d; --line: #2c2f38; --line-strong: #6a6f7d;
+  --ink: #e9e6de; --ink-muted: #aeaca5; --ink-subtle: #8d8c87;
+  --mist: #9cc6c2; --peach: #efb99c; --rose: #e7a6b2; --sage: #acc99e; --lilac: #bcaedb; --butter: #e8d49b; --clay: #ec9886;
+  --on-accent: #14151a;
+  --mist-ink: #9cc6c2; --peach-ink: #efb99c; --rose-ink: #e7a6b2; --sage-ink: #acc99e; --lilac-ink: #bcaedb; --butter-ink: #e8d49b; --clay-ink: #ec9886;
+  --accent: var(--mist); --accent-ink: var(--mist-ink);
+  --accent-wash: rgba(156, 198, 194, 0.14); --scrim: rgba(8, 9, 12, 0.62); --focus: #d6ebe8;
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  --ease-calm: cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) {
+    color-scheme: light;
+    --bg: #f2f0ea; --surface: #faf8f4; --surface-raised: #ffffff; --line: #e3dfd5; --line-strong: #8e8a80;
+    --ink: #1d1e23; --ink-muted: #4f4f4a; --ink-subtle: #66655f;
+    --mist: #a6ccc8; --peach: #f1c4ad; --rose: #edb7c1; --sage: #bad5ae; --lilac: #cbc0e7; --butter: #efe0aa; --clay: #eda594;
+    --mist-ink: #2b625f; --peach-ink: #85462a; --rose-ink: #8a3548; --sage-ink: #40652f; --lilac-ink: #55468a; --butter-ink: #6a5612; --clay-ink: #983726;
+    --accent-wash: rgba(43, 98, 95, 0.1); --scrim: rgba(29, 30, 35, 0.32); --focus: #2b625f;
+    --shadow-sheet: 0 -8px 32px rgba(29, 30, 35, 0.12);
+  }
+}
+:root[data-theme="dawn"] {
+  color-scheme: light;
+  --bg: #f2f0ea; --surface: #faf8f4; --surface-raised: #ffffff; --line: #e3dfd5; --line-strong: #8e8a80;
+  --ink: #1d1e23; --ink-muted: #4f4f4a; --ink-subtle: #66655f;
+  --mist: #a6ccc8; --peach: #f1c4ad; --rose: #edb7c1; --sage: #bad5ae; --lilac: #cbc0e7; --butter: #efe0aa; --clay: #eda594;
+  --mist-ink: #2b625f; --peach-ink: #85462a; --rose-ink: #8a3548; --sage-ink: #40652f; --lilac-ink: #55468a; --butter-ink: #6a5612; --clay-ink: #983726;
+  --accent-wash: rgba(43, 98, 95, 0.1); --scrim: rgba(29, 30, 35, 0.32); --focus: #2b625f;
+  --shadow-sheet: 0 -8px 32px rgba(29, 30, 35, 0.12);
+}
+[data-accent="peach"] { --accent: var(--peach); --accent-ink: var(--peach-ink); }
+[data-accent="rose"] { --accent: var(--rose); --accent-ink: var(--rose-ink); }
+[data-accent="sage"] { --accent: var(--sage); --accent-ink: var(--sage-ink); }
+[data-accent="lilac"] { --accent: var(--lilac); --accent-ink: var(--lilac-ink); }
+[data-accent="butter"] { --accent: var(--butter); --accent-ink: var(--butter-ink); }
+[data-contrast="more"] { --ink-muted: var(--ink); --ink-subtle: var(--ink-muted); --line: var(--line-strong); }
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-subtle: var(--ink-subtle);
+  --color-mist: var(--mist);
+  --color-peach: var(--peach);
+  --color-rose: var(--rose);
+  --color-sage: var(--sage);
+  --color-lilac: var(--lilac);
+  --color-butter: var(--butter);
+  --color-clay: var(--clay);
+  --color-on-accent: var(--on-accent);
+  --color-mist-ink: var(--mist-ink);
+  --color-peach-ink: var(--peach-ink);
+  --color-rose-ink: var(--rose-ink);
+  --color-sage-ink: var(--sage-ink);
+  --color-lilac-ink: var(--lilac-ink);
+  --color-butter-ink: var(--butter-ink);
+  --color-clay-ink: var(--clay-ink);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-wash: var(--accent-wash);
+  --color-scrim: var(--scrim);
+  --color-focus: var(--focus);
+  --font-sans: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --shadow-sheet: var(--shadow-sheet);
+  --ease-calm: var(--ease-calm);
+  --breakpoint-md: 768px;
+  --breakpoint-xl: 1100px;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; background: var(--bg); color: var(--ink);
+    font: 400 16px/24px var(--font-sans);
+    -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  }
+  :root[data-text="large"] body { font-size: 18px; line-height: 27px; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  :where(button, a, [tabindex], input, textarea, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  ::placeholder { color: var(--ink-subtle); }
+}
+
+/* Small set of shared component classes; everything else is utilities in the components. */
+@layer components {
+  .icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: var(--radius-md); border: 1px solid transparent; font: 500 15px/21px var(--font-sans); transition: transform 120ms var(--ease-calm), background 120ms; }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.45; pointer-events: none; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); }
+  .btn-secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn-ghost { background: transparent; color: var(--accent-ink); }
+  .btn-danger { background: transparent; color: var(--clay-ink); border-color: var(--line-strong); }
+  .btn-zap { background: var(--peach); color: var(--on-accent); }
+  .btn-sm { min-height: 36px; padding: 0 16px; }
+  .btn-lg { min-height: 52px; width: 100%; }
+  .iconbtn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 44px; padding: 0 8px; border-radius: 999px; color: var(--ink-muted); font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; }
+  .iconbtn:active { background: var(--accent-wash); }
+  .iconbtn:disabled { opacity: 0.4; }
+  .iconbtn[aria-pressed="true"] .icon { fill: currentColor; fill-opacity: 0.25; }
+  .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-muted); font: 500 15px/21px var(--font-sans); white-space: nowrap; }
+  .chip[aria-selected="true"], .chip[aria-pressed="true"], .chip[aria-checked="true"] { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+  .chip:disabled { opacity: 0.4; }
+  .field { min-height: 52px; width: 100%; padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-raised); color: var(--ink); font: 400 16px/24px var(--font-sans); resize: none; }
+  .toggle { appearance: none; flex: none; position: relative; width: 52px; height: 32px; margin: 6px 0; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--bg); transition: background 120ms; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 999px; background: var(--ink-muted); transition: transform 220ms var(--ease-calm), background 120ms; }
+  .toggle:checked { background: var(--accent); border-color: transparent; }
+  .toggle:checked::after { transform: translateX(20px); background: var(--on-accent); }
+  .key { font: 400 13px/18px var(--font-mono); color: var(--ink-muted); overflow-wrap: anywhere; }
+  .caption { font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .prose-note a { color: var(--accent-ink); font-weight: 500; }
+  .prose-note { overflow-wrap: anywhere; white-space: pre-wrap; }
+  .article-body h1, .article-body h2, .article-body h3 { font-weight: 600; margin: 1.2em 0 0.4em; }
+  .article-body h1 { font-size: 24px; line-height: 30px; }
+  .article-body h2 { font-size: 20px; line-height: 26px; }
+  .article-body p { margin: 0 0 1em; }
+  .article-body a { color: var(--accent-ink); }
+  .article-body ul, .article-body ol { padding-left: 1.4em; margin: 0 0 1em; list-style: revert; }
+  .article-body blockquote { border-left: 3px solid var(--line-strong); padding-left: 12px; color: var(--ink-muted); margin: 0 0 1em; }
+  .article-body pre, .article-body code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-raised); border-radius: 6px; }
+  .article-body pre { padding: 12px; overflow-x: auto; margin: 0 0 1em; }
+  .article-body code { padding: 1px 4px; }
+  .article-body img { border-radius: var(--radius-md); margin: 0 0 1em; }
+}
+
+@keyframes push-in { from { transform: translateX(24%); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes heart-pop { 0% { transform: scale(1); } 25% { transform: scale(0.7); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes heart-float { 0% { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(var(--s)) rotate(var(--r)); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-push { animation: push-in 220ms var(--ease-calm); }
+.animate-fade { animation: fade-in 220ms var(--ease-calm); }
+.animate-sheet { animation: sheet-in 220ms var(--ease-calm); }
+.animate-pop .icon { animation: heart-pop 460ms var(--ease-calm); }
+.spinner { width: 20px; height: 20px; border-radius: 999px; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+[data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
