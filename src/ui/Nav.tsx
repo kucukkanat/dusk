@@ -5,7 +5,7 @@ import type { NostrEvent } from "applesauce-core/helpers/event";
 import { eventStore } from "../nostr/core";
 import { useActivePubkey, useAccounts } from "../state/accounts";
 import { useSettings } from "../state/settings";
-import { openSheet } from "../state/ui";
+import { openSheet, closeSheet, replaceSheet } from "../state/ui";
 import { openCompose } from "../sheets/Compose";
 import { useHasUnreadActivity } from "../nostr/notifications";
 import { useConversations } from "../nostr/dms";
@@ -28,7 +28,6 @@ export const NAV_ITEMS: Record<string, NavItem> = {
   settings: { id: "settings", to: "/settings", icon: "settings", label: "Settings" },
 };
 
-const DOCK = ["home", "search", "activity", "messages", "me"];
 
 function useDots() {
   const me = useActivePubkey();
@@ -59,25 +58,12 @@ function useMyLists(): NostrEvent[] {
 const titleOf = (e: NostrEvent) => e.tags.find((t) => t[0] === "title")?.[1] || e.tags.find((t) => t[0] === "d")?.[1] || "List";
 const dOf = (e: NostrEvent) => e.tags.find((t) => t[0] === "d")?.[1] ?? "";
 
-export function Rail() {
-  const me = useActivePubkey();
-  const dots = useDots();
-  const accounts = useAccounts((s) => s.accounts);
-  const rail = useSettings((s) => s.rail);
+/** Open one of your lists as a feed (adding the feed if needed). */
+function useOpenList() {
   const feeds = useSettings((s) => s.feeds);
-  const activeFeed = useSettings((s) => s.activeFeed);
   const set = useSettings((s) => s.set);
-  const loc = useLocation();
   const nav = useNavigate();
-  const lists = useMyLists().filter((e) => e.kind === 30000 || e.kind === 39089);
-  const ref = useRef<HTMLDivElement>(null);
-  const order = [...rail.order, ...Object.keys(NAV_ITEMS).filter((k) => !rail.order.includes(k))];
-  const items = order.filter((id) => NAV_ITEMS[id] && !rail.hidden.includes(id));
-  const currentFeed = feeds.find((f) => f.id === activeFeed);
-  const activeList = loc.pathname === "/" && currentFeed?.src === "set" ? currentFeed.set : undefined;
-  const active = activeList ? "" : activeId(loc.pathname, items);
-
-  const openList = (e: NostrEvent) => {
+  return (e: NostrEvent) => {
     const d = dOf(e);
     let f = feeds.find((x) => x.src === "set" && x.set === d);
     if (!f) {
@@ -87,6 +73,27 @@ export function Rail() {
     set({ activeFeed: f.id });
     nav("/");
   };
+}
+
+const fullOrder = (order: string[]) => [...order, ...Object.keys(NAV_ITEMS).filter((k) => !order.includes(k))].filter((k) => NAV_ITEMS[k]);
+
+export function Rail() {
+  const me = useActivePubkey();
+  const dots = useDots();
+  const accounts = useAccounts((s) => s.accounts);
+  const rail = useSettings((s) => s.rail);
+  const feeds = useSettings((s) => s.feeds);
+  const activeFeed = useSettings((s) => s.activeFeed);
+  const loc = useLocation();
+  const lists = useMyLists().filter((e) => e.kind === 30000 || e.kind === 39089);
+  const ref = useRef<HTMLDivElement>(null);
+  const order = [...rail.order, ...Object.keys(NAV_ITEMS).filter((k) => !rail.order.includes(k))];
+  const items = order.filter((id) => NAV_ITEMS[id] && !rail.hidden.includes(id));
+  const currentFeed = feeds.find((f) => f.id === activeFeed);
+  const activeList = loc.pathname === "/" && currentFeed?.src === "set" ? currentFeed.set : undefined;
+  const active = activeList ? "" : activeId(loc.pathname, items);
+
+  const openList = useOpenList();
 
   const rowCls = (on: boolean) => `relative z-[1] flex min-h-12 items-center justify-center gap-3 rounded-full text-[15px] font-medium transition-colors xl:justify-start xl:px-4 ${on ? "text-ink" : "text-muted hover:text-ink"}`;
 
@@ -155,17 +162,24 @@ export function TabBar() {
   const dots = useDots();
   const loc = useLocation();
   const ref = useRef<HTMLElement>(null);
-  const active = activeId(loc.pathname, DOCK);
+  const dock = useSettings((s) => s.dock);
+  const order = fullOrder(dock.order);
+  const shown = order.slice(0, 4);
+  const more = order.slice(4);
+  const hit = activeId(loc.pathname, order);
+  const active = shown.includes(hit) ? hit : hit ? "more" : "";
   if (/^\/messages\/.+/.test(loc.pathname)) return null;
+  const tab = (on: boolean) => `relative z-[1] flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-[14px] font-semibold tracking-wide ${on ? "text-ink" : "text-muted"}`;
+  const pill = (on: boolean) => `grid h-[30px] w-14 place-items-center rounded-full transition-colors duration-300 ${on ? "text-on-accent" : ""}`;
   return (
     <nav ref={ref} className="relative z-20 flex h-[calc(64px+env(safe-area-inset-bottom))] border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Main">
-      <Slider container={ref} selector='[data-active="true"] [data-pill]' deps={[active]} className="rounded-full bg-accent" />
-      {DOCK.map((id) => {
+      <Slider container={ref} selector='[data-active="true"] [data-pill]' deps={[active, shown.join()]} className="rounded-full bg-accent" />
+      {shown.map((id) => {
         const it = NAV_ITEMS[id];
         const on = id === active;
         return (
-          <NavLink key={id} to={it.to} end={it.end} data-active={on} className={`relative z-[1] flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-[14px] font-semibold tracking-wide ${on ? "text-ink" : "text-muted"}`}>
-            <span data-pill className={`grid h-[30px] w-14 place-items-center rounded-full transition-colors duration-300 ${on ? "text-on-accent" : ""}`}>
+          <NavLink key={id} to={it.to} end={it.end} data-active={on} className={tab(on)}>
+            <span data-pill className={pill(on)}>
               <Icon name={it.icon} />
             </span>
             {it.label}
@@ -173,21 +187,81 @@ export function TabBar() {
           </NavLink>
         );
       })}
+      <button type="button" data-active={active === "more"} className={tab(active === "more")} aria-label="More" onClick={() => openSheet(<MoreDrawer items={more} />, { label: "More" })}>
+        <span data-pill className={pill(active === "more")}>
+          <Icon name="more" />
+        </span>
+        More
+        {more.some((id) => dots[id]) && <span className="absolute top-2 left-[calc(50%+12px)] size-2 rounded-full bg-lilac shadow-[0_0_0_2px_var(--surface)]" />}
+      </button>
     </nav>
+  );
+}
+
+/** The rest of the menu on phones, opened from the dock's More button. */
+function MoreDrawer({ items }: { items: string[] }) {
+  const me = useActivePubkey();
+  const dots = useDots();
+  const loc = useLocation();
+  const lists = useMyLists();
+  const openList = useOpenList();
+  const hit = activeId(loc.pathname, items);
+  const row = "relative flex min-h-[52px] w-full items-center gap-3 rounded-[10px] px-3 text-left text-[15px] font-medium hover:bg-wash";
+  return (
+    <div className="grid gap-1">
+      <h2 className="mb-1 text-xl font-semibold">More</h2>
+      {items.map((id) => {
+        const it = NAV_ITEMS[id];
+        return (
+          <NavLink key={id} to={it.to} end={it.end} className={`${row} ${hit === id ? "bg-wash" : ""}`} onClick={() => closeSheet()}>
+            <Icon name={it.icon} className="text-muted" />
+            {it.label}
+            {dots[id] && <span className="size-2 rounded-full bg-lilac-ink" />}
+          </NavLink>
+        );
+      })}
+      {me && lists.length > 0 && (
+        <>
+          <div className="px-3 pt-3 pb-1 text-[12px] font-semibold tracking-wide text-subtle uppercase">Your lists</div>
+          {lists.map((e) => (
+            <button key={e.id} type="button" className={row} onClick={() => (closeSheet(), openList(e))}>
+              <span className="grid size-[22px] flex-none place-items-center rounded-full border border-line-strong text-[11px] font-semibold uppercase">{[...titleOf(e)][0]}</span>
+              <span className="min-w-0 truncate">{titleOf(e)}</span>
+            </button>
+          ))}
+        </>
+      )}
+      <div className="mt-2 grid grid-cols-2 gap-2 border-t border-line pt-3">
+        <NavLink to="/identities" className="btn btn-secondary" onClick={() => closeSheet()}>
+          <Icon name={me ? "people" : "key"} size={18} />
+          {me ? "Identities" : "Sign in"}
+        </NavLink>
+        <button type="button" className="btn btn-secondary" onClick={() => replaceSheet(<EditNav initial="dock" />)}>
+          <Icon name="edit" size={18} />
+          Edit dock
+        </button>
+      </div>
+    </div>
   );
 }
 
 /* ---------- editing the sidebar ---------- */
 
 export function openEditRail() {
-  openSheet(<EditRail />, { label: "Edit sidebar" });
+  openSheet(<EditNav initial="rail" />, { label: "Edit navigation" });
 }
 
-function EditRail() {
+function EditNav({ initial }: { initial: "rail" | "dock" }) {
+  const [mode, setMode] = useState(initial);
   const rail = useSettings((s) => s.rail);
+  const dock = useSettings((s) => s.dock);
   const set = useSettings((s) => s.set);
-  const order = [...rail.order, ...Object.keys(NAV_ITEMS).filter((k) => !rail.order.includes(k))].filter((k) => NAV_ITEMS[k]);
-  const save = (patch: Partial<typeof rail>) => set({ rail: { ...rail, order, ...patch } });
+  const isDock = mode === "dock";
+  const order = fullOrder(isDock ? dock.order : rail.order);
+  const save = (patch: Partial<typeof rail>) => {
+    if (isDock) set({ dock: { order: patch.order ?? order } });
+    else set({ rail: { ...rail, order, ...patch } });
+  };
   const move = (i: number, d: number) => {
     const next = [...order];
     const [x] = next.splice(i, 1);
@@ -232,12 +306,20 @@ function EditRail() {
 
   return (
     <div className="grid gap-3">
-      <h2 className="text-xl font-semibold">Edit sidebar</h2>
-      <p className="caption">Choose what shows in the sidebar on wider screens, and in what order. Home always stays.</p>
+      <h2 className="text-xl font-semibold">Edit navigation</h2>
+      <div className="flex gap-2" role="tablist">
+        <button type="button" role="tab" className="chip" aria-selected={!isDock} onClick={() => setMode("rail")}>
+          Sidebar
+        </button>
+        <button type="button" role="tab" className="chip" aria-selected={isDock} onClick={() => setMode("dock")}>
+          Mobile dock
+        </button>
+      </div>
+      <p className="caption">{isDock ? "The first four show in the dock on phones. The rest are one tap away under More." : "Choose what shows in the sidebar on wider screens, and in what order. Home always stays."}</p>
       <div className={`rounded-[14px] border border-line [&>*+*]:border-t [&>*+*]:border-line ${drag ? "select-none" : "overflow-hidden"}`}>
         {order.map((id, i) => {
           const it = NAV_ITEMS[id];
-          const shown = !rail.hidden.includes(id);
+          const shown = isDock || !rail.hidden.includes(id);
           const dragging = drag?.from === i;
           return (
             <div
@@ -271,11 +353,16 @@ function EditRail() {
               <button type="button" className="iconbtn" aria-label={`Move ${it.label} down`} disabled={i === order.length - 1} onClick={() => move(i, 1)}>
                 <Icon name="down" />
               </button>
-              <input type="checkbox" className="toggle" aria-label={`Show ${it.label}`} checked={shown} disabled={id === "home"} onChange={(e) => toggle(id, e.target.checked)} />
+              {isDock ? (
+                <span className={`w-[52px] text-center text-[12px] font-medium ${i < 4 ? "text-accent-ink" : "text-subtle"}`}>{i < 4 ? "Dock" : "More"}</span>
+              ) : (
+                <input type="checkbox" className="toggle" aria-label={`Show ${it.label}`} checked={shown} disabled={id === "home"} onChange={(e) => toggle(id, e.target.checked)} />
+              )}
             </div>
           );
         })}
       </div>
+      {!isDock && (
       <label className="flex items-center justify-between gap-3 rounded-[14px] border border-line bg-surface px-3 py-2">
         <span>
           <b className="block text-[15px]">Show your lists</b>
@@ -283,7 +370,8 @@ function EditRail() {
         </span>
         <input type="checkbox" className="toggle" checked={rail.lists} onChange={(e) => save({ lists: e.target.checked })} />
       </label>
-      <button type="button" className="btn btn-ghost" onClick={() => set({ rail: { order: Object.keys(NAV_ITEMS), hidden: ["drafts"], lists: true } })}>
+      )}
+      <button type="button" className="btn btn-ghost" onClick={() => (isDock ? set({ dock: { order: Object.keys(NAV_ITEMS) } }) : set({ rail: { order: Object.keys(NAV_ITEMS), hidden: ["drafts"], lists: true } }))}>
         Reset to default
       </button>
     </div>

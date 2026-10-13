@@ -30,6 +30,8 @@ export type Settings = {
   onboarded: boolean;
   /** Left sidebar: order of items and which are hidden */
   rail: { order: string[]; hidden: string[]; lists: boolean };
+  /** Mobile dock: the first four items show, the rest live behind More */
+  dock: { order: string[] };
 };
 
 const DEFAULTS: Settings = {
@@ -62,6 +64,7 @@ const DEFAULTS: Settings = {
   activeFeed: "following",
   onboarded: false,
   rail: { order: ["home", "search", "activity", "messages", "me", "bookmarks", "lists", "drafts", "settings"], hidden: ["drafts"], lists: true },
+  dock: { order: ["home", "search", "activity", "messages", "me", "bookmarks", "lists", "drafts", "settings"] },
 };
 
 type SettingsStore = Settings & {
