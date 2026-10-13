@@ -93,8 +93,10 @@ export const writeRelays$ = new BehaviorSubject<string[]>(DEFAULT_RELAYS);
 /* ---------- local cache (IndexedDB) ---------- */
 
 let cache: NostrIDB | null = null;
+let cacheDb: { close(): void } | null = null;
 const cacheReady = openDB("dusk")
   .then((db) => {
+    cacheDb = db;
     cache = new NostrIDB(db, { maxEvents: 30000 });
     return cache.start().then(() => cache);
   })
@@ -144,6 +146,13 @@ export async function warmFromCache(filters: Filter[]) {
   const events = await cacheRequest(filters);
   for (const e of events) eventStore.add(e);
   return events;
+}
+
+/** Stop and close the cache so its database can be deleted (used by "Remove all data"). */
+export async function closeCache() {
+  const c = await cacheReady;
+  await c?.stop().catch(() => {});
+  cacheDb?.close();
 }
 
 export async function clearCache() {

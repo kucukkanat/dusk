@@ -17,6 +17,7 @@ import { useProfile, nameOf, formatNip05 } from "../nostr/profile";
 import { npub } from "../lib/links";
 import { sats, hostOf, middle } from "../lib/format";
 import { kvClear } from "../lib/kv";
+import { removeAllData } from "../lib/reset";
 import { copyText, toast, errorToast, openSheet } from "../state/ui";
 import { Screen } from "../ui/Screen";
 import { Group, Row, ToggleRow, ChipSet, Avatar, Field, Warn, StatusDot, Empty } from "../ui/primitives";
@@ -831,6 +832,19 @@ function Advanced() {
             if (!confirm("Remove decrypted messages from this device?")) return;
             await kvClear();
             toast("Cleared. Reload to decrypt again.");
+          }}
+        />
+      </Group>
+      <Group help="Signs every account out and deletes keys, settings, drafts, cached notes, decrypted messages and offline files from this device. Your posts stay on servers.">
+        <Row
+          icon="trash"
+          danger
+          title="Remove all data"
+          sub="Start Dusk fresh on this device"
+          onClick={async () => {
+            const keys = useAccounts.getState().accounts.some((a) => a.type === "key");
+            if (!confirm(keys ? "This deletes the private keys saved in Dusk. Without a backup you lose those accounts for good. Remove all data?" : "Sign out everywhere and remove all Dusk data from this device?")) return;
+            await removeAllData();
           }}
         />
       </Group>

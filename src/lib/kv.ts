@@ -28,6 +28,7 @@ function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest):
 export const kvGet = <T>(key: string) => tx<T | undefined>("readonly", (s) => s.get(key)).catch(() => undefined);
 export const kvSet = (key: string, value: unknown) => tx<void>("readwrite", (s) => s.put(value, key)).catch(() => {});
 export const kvDel = (key: string) => tx<void>("readwrite", (s) => s.delete(key)).catch(() => {});
+export const kvClose = () => dbp?.then((db) => db.close()).catch(() => {});
 export const kvClear = () => tx<void>("readwrite", (s) => s.clear()).catch(() => {});
 
 /** localStorage JSON helpers */
