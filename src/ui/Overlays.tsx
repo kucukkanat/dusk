@@ -65,7 +65,7 @@ function SheetFrame({ id, label, top, children, wide }: { id: number; label?: st
   };
 
   return (
-    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
+    <div data-fill className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
       <div className="absolute inset-0 bg-scrim animate-fade" onClick={() => closeSheet(id)} />
       <div
         ref={ref}
@@ -226,7 +226,7 @@ export function Lightbox() {
   const step = (d: number) => useUI.setState({ lightbox: { ...lb, index: Math.max(0, Math.min(lb.urls.length - 1, lb.index + d)) } });
   const alt = lb.alts?.[lb.index];
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/90 animate-fade" role="dialog" aria-label="Photo" onClick={close}>
+    <div data-fill className="fixed inset-0 z-50 flex flex-col bg-black/90 animate-fade" role="dialog" aria-label="Photo" onClick={close}>
       <div className="flex justify-end p-2 pt-[calc(8px+env(safe-area-inset-top))]">
         <button type="button" className="iconbtn text-white" aria-label="Close" onClick={close}>
           <Icon name="close" />

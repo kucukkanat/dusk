@@ -31,6 +31,7 @@ What Dusk does so the installed PWA feels like an app rather than a web page. �
 - ★ **No double-tap zoom or 300 ms tap delay**: `touch-action: manipulation` on `html`.
 - ★ **No text auto-resizing** on rotate: `text-size-adjust: 100%`.
 - ★ **No page rubber-banding**: `overscroll-behavior: none` on `html, body`. The app is a `fixed inset-0` grid with `body { overflow: hidden }`, and only inner panes scroll.
+- ★ **Full-height fallback for iOS home-screen apps** (`index.css`): under `@media (display-mode: standalone)` and `@supports (-webkit-touch-callout: none) and (height: 100lvh)`, `html, body` and every full-screen layer marked `data-fill` (app shell, sheets, lightbox, onboarding) get `height: 100lvh; bottom: auto`. This is a backstop in case iOS still reports a short viewport and leaves a gap under the tab bar. `-webkit-touch-callout` is supported only by iOS WebKit, so Android Chrome, desktop browsers and Safari tabs ignore the rule (checked: Chromium returns false for this `@supports` query). When adding a new full-screen `fixed inset-0` layer, give it `data-fill`.
 - **Scroll chaining contained**: each screen's scroller uses `overscroll-y-contain`, so reaching the end of a list doesn't bounce the frame around it.
 - **Inputs are 16px or larger** (`.field`, search), so iOS never zooms on focus.
 - **Theme colour follows the theme** (`useApplySettings`): `meta[name=theme-color]` is rewritten from `--bg` whenever the theme changes, so the system bars always match.

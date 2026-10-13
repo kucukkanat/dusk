@@ -85,6 +85,14 @@
   html, body, #root { height: 100%; }
   html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html, body { overscroll-behavior: none; }
+  /* iOS 26 home-screen apps can report a viewport shorter than the screen, leaving a gap under the
+     tab bar. There, size full-screen layers to the large viewport. -webkit-touch-callout limits this to iOS. */
+  @media (display-mode: standalone) {
+    @supports (-webkit-touch-callout: none) and (height: 100lvh) {
+      html, body { height: 100lvh; }
+      [data-fill] { bottom: auto; height: 100lvh; }
+    }
+  }
   /* app chrome isn't text: no selection or long-press callout (note text and its links stay selectable) */
   :where(button, nav, header, label, [role="tab"], a:not(.prose-note a, .article-body a)) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   img { -webkit-user-drag: none; }
