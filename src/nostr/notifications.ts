@@ -5,7 +5,7 @@ import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getContacts } from "applesauce-core/helpers/contacts";
 import { getZapAmount, getZapSender, getZapRequest } from "applesauce-common/helpers/zap";
 import { getNip10References } from "applesauce-common/helpers/threading";
-import { eventStore, pool, readRelays$, uniqRelays, DEFAULT_RELAYS, now } from "./core";
+import { eventStore, pool, readRelays$, uniqRelays, warmFromCache, DEFAULT_RELAYS, now } from "./core";
 import { useActivePubkey } from "../state/accounts";
 import { useSettings, getSettings } from "../state/settings";
 import { lsGet, lsSet } from "../lib/kv";
@@ -48,15 +48,21 @@ function persist(s: ReadState) {
   lsSet("notifread", { lastRead: s.lastRead, unreadIds: s.unreadIds, readIds: s.readIds, followers: s.followers });
 }
 
-/** Listen for anything that mentions the signed-in person, on their inbox relays. */
+/** Listen for anything that mentions the signed-in person, on their inbox relays and the big public ones. */
 export function useNotificationFeed() {
   const me = useActivePubkey();
+  const read = use$(readRelays$);
   useEffect(() => {
     if (!me) return;
-    const relays = uniqRelays(readRelays$.value, DEFAULT_RELAYS);
+    const relays = uniqRelays(read, DEFAULT_RELAYS);
     const since = now() - 14 * 86400;
-    const filter = { kinds: KINDS, "#p": [me], since };
-    const req = pool.request(relays, { ...filter, limit: 300 }, { eventStore, timeout: 8000 } as never).subscribe({ next: (e) => eventStore.add(e), error: () => {} });
+    // follow lists are big and change often; ask for them separately so they can't crowd out replies and zaps
+    const filters = [
+      { kinds: KINDS.filter((k) => k !== 3), "#p": [me], since, limit: 400 },
+      { kinds: [3], "#p": [me], since, limit: 50 },
+    ];
+    warmFromCache(filters.map((f) => ({ ...f, limit: undefined })));
+    const req = pool.request(relays, filters, { eventStore, timeout: 8000 } as never).subscribe({ next: (e) => eventStore.add(e), error: () => {} });
     const live = pool.subscription(relays, { kinds: KINDS, "#p": [me], since: now() }).subscribe({
       next: (e) => {
         const stored = eventStore.add(e) ?? e;
@@ -68,7 +74,7 @@ export function useNotificationFeed() {
       req.unsubscribe();
       live.unsubscribe();
     };
-  }, [me]);
+  }, [me, read.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 function inQuietHours() {

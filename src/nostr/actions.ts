@@ -1,4 +1,5 @@
 import { ActionRunner } from "applesauce-actions";
+import { RelayGroup } from "applesauce-relay";
 import type { ActionBuilder } from "applesauce-actions";
 import type { EventSigner } from "applesauce-core";
 import type { NostrEvent } from "applesauce-core/helpers/event";
@@ -56,9 +57,12 @@ export function runAction<Args extends unknown[]>(builder: ActionBuilder<Args>, 
 export async function ensureLatest(kind: number, pubkey = getActivePubkey(), identifier?: string): Promise<NostrEvent | undefined> {
   if (!pubkey) throw new Error("Sign in first");
   const relays = uniqRelays(writeRelays$.value, LOOKUP_RELAYS, DEFAULT_RELAYS);
+  const have = eventStore.getReplaceable(kind, pubkey, identifier);
   const filter = identifier != null ? { kinds: [kind], authors: [pubkey], "#d": [identifier] } : { kinds: [kind], authors: [pubkey] };
+  // the session keeps this live already; a short check is enough, and settle soon after the first relay answers
   await new Promise<void>((resolve) => {
-    const sub = pool.request(relays, filter, { eventStore, timeout: 6000 } as never).subscribe({
+    const complete = RelayGroup.completeOnAny(RelayGroup.completeAfterFirstRelay(have ? 400 : 1200), RelayGroup.completeOnAllEose());
+    const sub = pool.request(relays, filter, { eventStore, timeout: 6000, complete } as never).subscribe({
       next: (e) => eventStore.add(e),
       complete: () => resolve(),
       error: () => resolve(),

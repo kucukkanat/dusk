@@ -41,7 +41,7 @@ function NoteMenu({ event }: { event: NostrEvent }) {
   };
   return (
     <ul className="grid gap-1">
-      {typeof navigator.share === "function" && <Item icon="share" label="Share" onClick={act(() => navigator.share({ url: link, text: event.content.slice(0, 120) }).catch(() => {}))} />}
+      {typeof navigator.share === "function" && <Item icon="share" label="Share" onClick={act(() => navigator.share({ url: link }).catch(() => {}))} />}
       <Item icon="link" label="Copy link" onClick={act(() => copyText(link, "Copied link"))} />
       {event.content && <Item icon="copy" label="Copy text" onClick={act(() => copyText(event.content, "Copied text"))} />}
       <Item icon="bookmark" label={bookmarked ? "Remove bookmark" : "Bookmark"} onClick={act(() => requireSignIn() && setBookmark(event, !bookmarked))} />

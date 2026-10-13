@@ -32,6 +32,8 @@ export class Timeline {
   private listeners = new Set<() => void>();
   private seen = new Set<string>();
   private plan: RelayPlan | null = null;
+  /** Oldest timestamp fetched so far, including events this timeline hides. */
+  private cursor?: number;
   private live?: Subscription;
   private reqs: Subscription[] = [];
   private refs = 0;
@@ -89,6 +91,7 @@ export class Timeline {
     this.live?.unsubscribe();
     this.live = undefined;
     this.plan = null;
+    this.cursor = undefined;
     this.seen.clear();
     this.set({ events: [], fresh: [], done: false, loadedOnce: false, error: undefined });
     await this.loadMore();
@@ -101,7 +104,7 @@ export class Timeline {
     this.set({ events, fresh: [] });
   }
 
-  async loadMore() {
+  async loadMore(fill = 0): Promise<void> {
     if (this.state.loading || this.state.done) return;
     this.set({ loading: true });
     let plan: RelayPlan;
@@ -116,7 +119,7 @@ export class Timeline {
       this.set({ loading: false, done: true, loadedOnce: true });
       return;
     }
-    const until = this.state.events.length ? this.state.events[this.state.events.length - 1].created_at - 1 : undefined;
+    const until = this.cursor !== undefined ? this.cursor - 1 : undefined;
     const limit = this.spec.pageSize ?? 25;
     const page = (f: Filter): Filter => ({ ...f, limit, ...(until ? { until } : {}) });
 
@@ -142,10 +145,18 @@ export class Timeline {
     const got: NostrEvent[] = [];
     await new Promise<void>((resolve) => {
       let open = relays.length;
-      const finish = () => {
-        if (--open <= 0) resolve();
+      let grace: ReturnType<typeof setTimeout> | null = null;
+      const end = () => {
+        clearTimeout(timer);
+        if (grace) clearTimeout(grace);
+        resolve();
       };
-      const timer = setTimeout(resolve, 8000);
+      // don't let one slow or dead relay hold the page: once one has answered, give the rest a moment
+      const finish = () => {
+        if (--open <= 0) return end();
+        if (!grace && got.length) grace = setTimeout(end, 1200);
+      };
+      const timer = setTimeout(end, 8000);
       for (const relay of relays) {
         const sub = pool
           .relay(relay)
@@ -160,15 +171,6 @@ export class Timeline {
           });
         this.reqs.push(sub);
       }
-      // resolve early once most relays have answered
-      const early = setInterval(() => {
-        if (open <= Math.floor(relays.length * 0.25) && got.length) {
-          clearInterval(early);
-          clearTimeout(timer);
-          resolve();
-        }
-      }, 300);
-      setTimeout(() => clearInterval(early), 8000);
     });
 
     // Relays answer with their own newest N; cut the page at the point where every relay is
@@ -179,6 +181,7 @@ export class Timeline {
     const cut = got.length > limit ? got[Math.min(got.length - 1, limit * 2)].created_at : 0;
     for (const e of got) {
       if (e.created_at < cut) break;
+      this.cursor = Math.min(this.cursor ?? Infinity, e.created_at);
       if (this.seen.has(e.id) || !this.accept(e)) continue;
       this.seen.add(e.id);
       this.insert(events, e);
@@ -186,6 +189,8 @@ export class Timeline {
     }
     this.set({ events, loading: false, loadedOnce: true, done: added === 0 && got.length === 0 });
     if (!this.live && this.refs > 0 && this.spec.live !== false) this.startLive();
+    // a page can be mostly things this timeline hides (replies, or only replies); keep going so the screen fills
+    if (added < 5 && got.length && fill < 3 && this.refs > 0) return this.loadMore(fill + 1);
   }
 
   private startLive() {
@@ -279,7 +284,7 @@ export async function loadContactLists(pubkeys: string[], ms = 5000) {
   cached.forEach((e) => eventStore.add(e));
   const still = missing.filter((p) => !eventStore.hasReplaceable(3, p));
   if (!still.length) return;
-  await requestAll(uniqRelays(LOOKUP_RELAYS, readRelays$.value), chunk(still, 300).map((authors) => ({ kinds: [3], authors })), ms);
+  await requestAll(uniqRelays(LOOKUP_RELAYS, readRelays$.value), chunk(still, 100).map((authors) => ({ kinds: [3], authors })), ms);
 }
 
 export function requestAll(relays: string[], filters: Filter[], ms = 5000): Promise<NostrEvent[]> {
@@ -314,7 +319,7 @@ export async function outboxPlan(authors: string[], base: BaseFilter, opts: { ma
     const relays = ev ? uniqRelays(getOutboxes(ev)) : [];
     return { pubkey, relays: relays.length ? relays : readRelays$.value };
   });
-  const selected = selectOptimalRelays(users, { maxConnections: opts.maxRelays ?? 18, maxRelaysPerUser: 2 });
+  const selected = selectOptimalRelays(users, { maxConnections: opts.maxRelays ?? 18, maxRelaysPerUser: authors.length <= 3 ? 4 : 2 });
   const byRelay = groupPubkeysByRelay(selected);
   // anyone left without a relay goes to our own read relays
   const covered = new Set(Object.values(byRelay).flatMap((ps) => ps.map((p) => p.pubkey)));
@@ -322,11 +327,11 @@ export async function outboxPlan(authors: string[], base: BaseFilter, opts: { ma
   const plan: RelayPlan = {};
   for (const [relay, ps] of Object.entries(byRelay)) {
     const pubkeys = ps.map((p) => p.pubkey);
-    plan[relay] = chunk(pubkeys, 250).map((a) => ({ ...base, authors: a }));
+    plan[relay] = chunk(pubkeys, 150).map((a) => ({ ...base, authors: a }));
   }
   if (orphans.length)
     for (const r of readRelays$.value)
-      plan[r] = [...(plan[r] ?? []), ...chunk(orphans, 250).map((a) => ({ ...base, authors: a }))];
+      plan[r] = [...(plan[r] ?? []), ...chunk(orphans, 150).map((a) => ({ ...base, authors: a }))];
   return plan;
 }
 

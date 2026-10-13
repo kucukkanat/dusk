@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useActivePubkey } from "../state/accounts";
 import { useSettings, type Feed, type FeedSource } from "../state/settings";
 import { feedSpec } from "../nostr/feeds";
@@ -33,6 +33,11 @@ export function FeedView({ feed }: { feed: Feed }) {
   const mutes = useMyMutes();
   const visible = useMemo(() => events.filter((e) => !isMuted(e, mutes)), [events, mutes]);
   const needsSignIn = !me && (feed.src === "fof" || feed.src === "set");
+  // global is a stream: while you're at the top, new notes slide straight in
+  useEffect(() => {
+    if (feed.src !== "global" || !fresh.length) return;
+    if ((document.querySelector("[data-scroller]")?.scrollTop ?? 0) < 80) timeline?.showFresh();
+  }, [feed.src, fresh, timeline]);
 
   return (
     <>

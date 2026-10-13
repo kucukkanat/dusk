@@ -3,7 +3,7 @@ import { getContacts } from "applesauce-core/helpers/contacts";
 import { getNip10References } from "applesauce-common/helpers/threading";
 import type { Feed } from "../state/settings";
 import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "./core";
-import { loadContactLists, outboxPlan, relaysPlan, type TimelineSpec } from "./timeline";
+import { chunk, loadContactLists, outboxPlan, relaysPlan, type TimelineSpec } from "./timeline";
 import { ensureLatest } from "./actions";
 
 /** People to suggest to someone brand new: long-time Nostr builders and writers. */
@@ -70,11 +70,17 @@ export function feedSpec(feed: Feed, me: string | null): TimelineSpec {
         accept: topLevel,
         plan: async () => {
           if (!me) return {};
-          return outboxPlan(await friendsOfFriends(me), { kinds: [1, 20] }, { maxRelays: 12 });
+          const fof = await friendsOfFriends(me);
+          if (!fof.length) throw new Error("Couldn't load who your follows follow. Pull to try again.");
+          const plan = await outboxPlan(fof, { kinds: [1, 20] }, { maxRelays: 14 });
+          // the big relays carry most people too, and cover anyone whose own relays are slow or gone
+          for (const r of DEFAULT_RELAYS) plan[r] = [...(plan[r] ?? []), ...chunk(fof, 150).map((authors) => ({ kinds: [1, 20], authors }))];
+          return plan;
         },
       };
     case "global":
-      return { key, accept: topLevel, plan: async () => relaysPlan(readRelays$.value, { kinds: [1, 6, 20] }) };
+      // your servers plus the big public ones, so there is always something flowing
+      return { key, accept: topLevel, pageSize: 40, plan: async () => relaysPlan(uniqRelays(readRelays$.value, DEFAULT_RELAYS), { kinds: [1, 6, 20] }) };
     case "tag": {
       const t = (feed.tag ?? "").toLowerCase();
       return { key, plan: async () => relaysPlan(uniqRelays(readRelays$.value, DEFAULT_RELAYS), { kinds: [1, 20, 30023], "#t": [t] }) };

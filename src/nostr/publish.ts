@@ -1,5 +1,6 @@
 import type { EventTemplate, NostrEvent } from "applesauce-core/helpers/event";
 import { create } from "zustand";
+import type { PublishResponse } from "applesauce-relay";
 import { signEvent } from "../state/accounts";
 import { eventStore, pool, uniqRelays, writeRelays$, now } from "./core";
 import { inboxesOf } from "./relays";
@@ -40,19 +41,37 @@ async function sendEvent(event: NostrEvent, opts: PublishOptions = {}) {
   }
   if (!opts.silent) setItem({ id: event.id, kind: event.kind, state: "sending", event, relays }, event.id);
   try {
-    const res = await pool.publish(relays, event, { timeout: 10000 } as never);
-    const ok = res.filter((r) => r.ok);
-    if (!ok.length) {
-      const msg = res.find((r) => r.message)?.message ?? "No server accepted it";
+    const res = await firstAccept(relays, event);
+    if (!res.ok) {
+      const msg = res.message ?? "No server accepted it";
       if (!opts.silent) setItem({ id: event.id, kind: event.kind, state: "failed", error: msg, event, relays }, event.id);
       throw new Error(msg);
     }
     if (!opts.silent) setItem(null, event.id);
-    return { event, accepted: ok.map((r) => r.from), results: res };
+    return { event, accepted: [res.from] };
   } catch (e) {
     if (!opts.silent) setItem({ id: event.id, kind: event.kind, state: "failed", error: (e as Error).message, event, relays }, event.id);
     throw e;
   }
+}
+
+/** Send to every relay, but settle as soon as one accepts; the rest keep going in the background. */
+function firstAccept(relays: string[], event: NostrEvent): Promise<PublishResponse> {
+  return new Promise((resolve) => {
+    let left = relays.length;
+    let failure: PublishResponse | undefined;
+    if (!left) return resolve({ ok: false, from: "", message: "No servers to send to" });
+    for (const url of relays)
+      pool
+        .relay(url)
+        .publish(event, { timeout: 10000 } as never)
+        .catch((e: Error): PublishResponse => ({ ok: false, from: url, message: e.message }))
+        .then((r) => {
+          if (r.ok) return resolve(r);
+          failure ??= r.message ? r : undefined;
+          if (--left === 0) resolve(failure ?? { ok: false, from: url });
+        });
+  });
 }
 
 /** Sign a template with the active account and send it to the right relays (outbox model). */
