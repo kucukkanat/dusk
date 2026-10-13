@@ -1,0 +1,13 @@
+{
+  "name": "dusk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A calm Nostr client. Mobile-first PWA prototype.",
+  "type": "module",
+  "scripts": {
+    "build": "bun build.js",
+    "dev": "bun build.js && bunx serve dist",
+    "check": "node --check src/js/app.js && node --check src/js/dusk.js && node --check src/sw.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dusk</title>
+<meta name="description" content="A calm Nostr client. Quiet by default, customizable when you want it.">
+<meta name="theme-color" content="#14151a">
+<meta name="color-scheme" content="dark light">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dusk">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="./css/tokens.css">
+<link rel="stylesheet" href="./css/dusk.css">
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="rail" id="rail" aria-label="Main"></nav>
+  <main class="main" id="main"></main>
+  <aside class="side" id="side" aria-label="Details"></aside>
+  <div class="tabwrap" id="tabwrap"></div>
+</div>
+<div id="layer" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="onb" hidden></div>
+<input type="file" id="file" accept="image/*" hidden>
+
+<noscript><p style="padding:24px">Dusk needs JavaScript to run.</p></noscript>
+<script src="./js/vendor/qrcode.min.js"></script>
+<script src="./js/dusk.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>
