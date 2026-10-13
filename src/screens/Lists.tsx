@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
-import { getBookmarks } from "applesauce-common/helpers/bookmark";
 import { eventStore, readRelays$, uniqRelays, DEFAULT_RELAYS } from "../nostr/core";
 import { requestAll } from "../nostr/timeline";
 import { useActivePubkey } from "../state/accounts";
-import { useMyBookmarks, createSet, useFollowing } from "../nostr/lists";
+import { useBookmarkList, createSet, useFollowing } from "../nostr/lists";
 import { eventPath } from "../lib/links";
 import { ago, plural } from "../lib/format";
 import { errorToast, toast } from "../state/ui";
@@ -24,9 +23,7 @@ function BookmarkItem({ pointer }: { pointer: string | { kind: number; pubkey: s
 
 export function Bookmarks() {
   const me = useActivePubkey();
-  const ids = useMyBookmarks();
-  const ev = use$(() => (me ? eventStore.replaceable(10003, me) : undefined), [me]);
-  const pointers = useMemo(() => (ev ? getBookmarks(ev).reverse() : []), [ev, ids]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pointers = useBookmarkList();
   return (
     <Screen back title="Bookmarks">
       {!me ? (

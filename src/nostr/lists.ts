@@ -3,9 +3,11 @@ import { use$ } from "applesauce-react/hooks";
 import type { NostrEvent } from "applesauce-core/helpers/event";
 import { getContacts } from "applesauce-core/helpers/contacts";
 import { getMutedThings, isHiddenMutesUnlocked, unlockHiddenMutes, type MutedThings } from "applesauce-common/helpers/mute";
-import { getBookmarks, isHiddenBookmarksUnlocked, unlockHiddenBookmarks } from "applesauce-common/helpers/bookmark";
-import { FollowUser, UnfollowUser, MuteUser, UnmuteUser, MuteWord, UnmuteWord, MuteThread, UnmuteThread, MuteHashtag, UnmuteHashtag, BookmarkEvent, UnbookmarkEvent, AddUserToFollowSet, RemoveUserFromFollowSet, CreateFollowSet } from "applesauce-actions/actions";
+import { getBookmarks, getHiddenBookmarks, isHiddenBookmarksUnlocked, unlockHiddenBookmarks, type BookmarkPointer } from "applesauce-common/helpers/bookmark";
+import { FollowUser, UnfollowUser, MuteUser, UnmuteUser, MuteWord, UnmuteWord, MuteThread, UnmuteThread, MuteHashtag, UnmuteHashtag, AddUserToFollowSet, RemoveUserFromFollowSet, CreateFollowSet } from "applesauce-actions/actions";
 import { eventStore } from "./core";
+import { getReplaceableAddressForEvent } from "applesauce-core/helpers/pointers";
+import { unlockHiddenTags, setHiddenTagsCache } from "applesauce-core/helpers/hidden-tags";
 import { ContactsFactory } from "applesauce-common/factories";
 import { publish } from "./publish";
 import { activeSigner, ensureLatest, runAction } from "./actions";
@@ -50,6 +52,27 @@ export function useMyMutes(): MutedThings {
   return useMemo(() => (ev ? getMutedThings(ev) : EMPTY_MUTES), [ev, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/** Public and private (encrypted) bookmarks together, newest first. */
+export function allBookmarks(ev: NostrEvent): BookmarkPointer[] {
+  const seen = new Set<string>();
+  const out: BookmarkPointer[] = [];
+  for (const p of [...(getHiddenBookmarks(ev) ?? []), ...getBookmarks(ev)].reverse()) {
+    const k = "id" in p ? p.id : `${p.kind}:${p.pubkey}:${p.identifier}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
+export function useBookmarkList(): BookmarkPointer[] {
+  const me = useActivePubkey();
+  const ev = use$(() => (me ? eventStore.replaceable(10003, me) : undefined), [me]);
+  const tick = use$(() => eventStore.update$, []);
+  useUnlock(ev, isHiddenBookmarksUnlocked, unlockBookmarks);
+  return useMemo(() => (ev ? allBookmarks(ev) : []), [ev, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export function useMyBookmarks(): Set<string> {
   const me = useActivePubkey();
   const ev = use$(() => (me ? eventStore.replaceable(10003, me) : undefined), [me]);
@@ -58,7 +81,7 @@ export function useMyBookmarks(): Set<string> {
   return useMemo(() => {
     const s = new Set<string>();
     if (ev)
-      for (const p of getBookmarks(ev)) {
+      for (const p of allBookmarks(ev)) {
         if ("id" in p) s.add(p.id);
         else s.add(`${p.kind}:${p.pubkey}:${p.identifier}`);
       }
@@ -138,11 +161,34 @@ export async function setMute(kind: "user" | "word" | "thread" | "tag", value: s
   }
 }
 
+/** Bookmark any event privately (NIP-51 kind 10003, encrypted to yourself). */
 export async function setBookmark(ev: NostrEvent, on: boolean) {
   try {
-    await ensureLatest(10003);
-    await runAction(on ? BookmarkEvent : UnbookmarkEvent, ev, undefined, true);
-    if (!on) await runAction(UnbookmarkEvent, ev, undefined, false).catch(() => {});
+    const me = getActivePubkey();
+    if (!me) throw new Error("Sign in first");
+    const list = await ensureLatest(10003);
+    const addr = getReplaceableAddressForEvent(ev);
+    const tag = addr ? ["a", addr] : ["e", ev.id];
+    const same = (t: string[]) => t[0] === tag[0] && t[1] === tag[1];
+    let hidden: string[][] = [];
+    if (list?.content) {
+      try {
+        hidden = (await unlockHiddenTags(list as never, activeSigner as never)) as string[][];
+      } catch {
+        throw new Error("Couldn't read your private bookmarks with this signer");
+      }
+    }
+    const publicTags = (list?.tags ?? []).filter((t) => !same(t));
+    hidden = hidden.filter((t) => !same(t));
+    if (on) hidden.push(tag);
+    const plain = JSON.stringify(hidden);
+    const content = hidden.length ? await activeSigner.nip44!.encrypt(me, plain) : "";
+    const res = await publish({ kind: 10003, content, tags: publicTags }, { notifyTagged: false });
+    // we already know what's inside; skip another decrypt prompt
+    if (hidden.length) {
+      setHiddenTagsCache(res.event as never, hidden as never);
+      eventStore.update(res.event);
+    }
     toast(on ? "Bookmarked" : "Removed from bookmarks");
   } catch (e) {
     errorToast(e, "Couldn't update bookmarks");

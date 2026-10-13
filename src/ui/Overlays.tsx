@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { useUI, closeSheet } from "../state/ui";
 import { Icon } from "./Icon";
 import { Avatar, Name } from "./primitives";
@@ -6,6 +7,11 @@ import { Avatar, Name } from "./primitives";
 /** Bottom sheets on phones, centred cards on wider screens. Drag the handle down to close. */
 export function SheetHost() {
   const sheets = useUI((s) => s.sheets);
+  const loc = useLocation();
+  // moving to another screen closes whatever sheet was open
+  useEffect(() => {
+    useUI.getState().closeAllSheets();
+  }, [loc.pathname]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && useUI.getState().sheets.length) {

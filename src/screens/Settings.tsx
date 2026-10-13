@@ -516,6 +516,13 @@ function Servers() {
       const tags = draft.map((r) => (r.read && r.write ? ["r", r.url] : ["r", r.url, r.read ? "read" : "write"]));
       // publish to old and new relays plus the indexers so everyone finds the new list
       await publish({ kind: 10002, tags }, { relays: uniqRelays(draft.map((r) => r.url), LOOKUP_RELAYS), notifyTagged: false });
+      // new servers become message servers too, so DMs reach you wherever you read
+      const added = draft.map((r) => r.url).filter((u) => !current.some((c) => c.url === u));
+      const dm = added.length ? await ensureLatest(10050) : undefined;
+      if (dm && added.length) {
+        const have = dm.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
+        await publish({ kind: 10050, tags: uniqRelays(have, added).map((u) => ["relay", u]) }, { notifyTagged: false });
+      }
       setDraft(null);
       toast("Servers saved");
     } catch (e) {
@@ -576,17 +583,20 @@ function Servers() {
   );
 }
 
-function ListEditor({ kind, tag, title, help, defaults }: { kind: number; tag: "relay" | "server"; title: string; help: string; defaults: string[] }) {
+function ListEditor({ kind, tag, title, help, suggestions, fallback = [] }: { kind: number; tag: "relay" | "server"; title: string; help: string; suggestions: string[]; fallback?: string[] }) {
   const me = useActivePubkey();
   const ev = use$(() => (me ? eventStore.replaceable(kind, me) : undefined), [me, kind]);
-  const current = useMemo(() => (ev ? (kind === 10063 ? getBlossomServersFromList(ev).map((u) => u.toString().replace(/\/$/, "")) : ev.tags.filter((t) => t[0] === tag).map((t) => t[1])) : []), [ev, kind, tag]);
+  const saved = useMemo(() => (ev ? (kind === 10063 ? getBlossomServersFromList(ev).map((u) => u.toString().replace(/\/$/, "")) : ev.tags.filter((t) => t[0] === tag).map((t) => t[1])) : []), [ev, kind, tag]);
+  // with no list of their own, people use the fallback (e.g. all their servers); edits start from it
+  const usingFallback = !saved.length && fallback.length > 0;
+  const current = usingFallback ? fallback : saved;
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const save = async (next: string[]) => {
     setBusy(true);
     try {
       await ensureLatest(kind);
-      await publish({ kind, tags: next.map((u) => [tag, u]) }, { notifyTagged: false });
+      await publish({ kind, tags: [...new Set(next)].map((u) => [tag, u]) }, { notifyTagged: false });
       toast("Saved");
     } catch (e) {
       errorToast(e, "Couldn't save");
@@ -595,32 +605,35 @@ function ListEditor({ kind, tag, title, help, defaults }: { kind: number; tag: "
     }
   };
   const valid = (v: string) => (tag === "relay" ? normalizeRelay(v) : /^https:\/\/\S+$/.test(v) ? v.replace(/\/$/, "") : null);
+  const norm = (u: string) => (tag === "relay" ? (normalizeRelay(u) ?? u) : u.replace(/\/$/, ""));
+  const have = new Set(current.map(norm));
+  const offer = [...new Set(suggestions.map(norm))].filter((u) => !have.has(u));
   return (
     <>
       <Group label={title} help={help}>
-        {current.length ? (
-          current.map((u) => (
-            <div key={u} className="flex items-center gap-2 px-4 py-3">
-              <span className="key min-w-0 flex-1 text-ink">{u}</span>
-              <button type="button" className="iconbtn" aria-label={`Remove ${u}`} disabled={busy} onClick={() => save(current.filter((x) => x !== u))}>
-                <Icon name="trash" />
-              </button>
-            </div>
-          ))
-        ) : (
-          <div className="grid gap-2 px-4 py-3 text-[14px] text-muted">
-            None set. {defaults.length > 0 && "Suggested:"}
-            <div className="flex flex-wrap gap-2">
-              {defaults.map((d) => (
-                <button key={d} type="button" className="chip text-[13px]" onClick={() => save([...current, d])}>
-                  <Icon name="plus" size={16} />
-                  {d.replace(/^wss:\/\/|^https:\/\//, "")}
-                </button>
-              ))}
-            </div>
+        {usingFallback && <p className="px-4 pt-3 text-[13px] text-muted">You haven't picked any yet, so these servers are used. Change them to save your own list.</p>}
+        {current.map((u) => (
+          <div key={u} className="flex items-center gap-2 px-4 py-3">
+            <span className="key min-w-0 flex-1 text-ink">{u}</span>
+            <button type="button" className="iconbtn" aria-label={`Remove ${u}`} disabled={busy || current.length < 2} onClick={() => save(current.filter((x) => x !== u))}>
+              <Icon name="trash" />
+            </button>
           </div>
-        )}
+        ))}
+        {!current.length && <p className="px-4 py-3 text-[14px] text-muted">None set.</p>}
       </Group>
+      {offer.length > 0 && (
+        <Group label="Add with one tap">
+          <div className="flex flex-wrap gap-2 px-4 py-3">
+            {offer.map((d) => (
+              <button key={d} type="button" className="chip text-[13px]" disabled={busy} onClick={() => save([...current, d])}>
+                <Icon name="plus" size={16} />
+                {d.replace(/^wss?:\/\/|^https:\/\//, "")}
+              </button>
+            ))}
+          </div>
+        </Group>
+      )}
       <form
         className="flex gap-2 px-4 pt-4"
         onSubmit={(e) => {
@@ -641,7 +654,20 @@ function ListEditor({ kind, tag, title, help, defaults }: { kind: number; tag: "
 }
 
 function InboxServers() {
-  return <ListEditor kind={10050} tag="relay" title="Message servers" help="People send your private messages (NIP-17) to these servers. Pick ones that require sign-in to read, like auth.nostr1.com or inbox.nostr.wine." defaults={["wss://auth.nostr1.com", "wss://relay.0xchat.com", "wss://nos.lol"]} />;
+  const mine = useMyRelays();
+  const all = mine.map((r) => r.url);
+  // without a message-server list, other apps deliver DMs to the servers you read from
+  const reading = mine.filter((r) => r.read).map((r) => r.url);
+  return (
+    <ListEditor
+      kind={10050}
+      tag="relay"
+      title="Message servers"
+      help="People send your private messages (NIP-17) to these servers. Servers that require sign-in to read, like auth.nostr1.com, keep them more private."
+      fallback={reading}
+      suggestions={[...all, "wss://auth.nostr1.com", "wss://relay.0xchat.com", "wss://nos.lol"]}
+    />
+  );
 }
 
 function MediaServers() {
@@ -651,7 +677,7 @@ function MediaServers() {
       <Group label="Upload to" help="Photos you post go to this Blossom server first.">
         <ChipSet options={[...new Set([s.mediaServer, ...mediaServers(), "https://blossom.primal.net", "https://nostr.download", "https://blossom.band"])].map((u) => [u, hostOf(u)] as [string, string])} value={s.mediaServer} onChange={(v) => s.set({ mediaServer: v })} />
       </Group>
-      <ListEditor kind={10063} tag="server" title="Your media servers" help="Published with your account (BUD-03) so other apps know where your files live." defaults={["https://blossom.primal.net", "https://nostr.download"]} />
+      <ListEditor kind={10063} tag="server" title="Your media servers" help="Published with your account (BUD-03) so other apps know where your files live." suggestions={[s.mediaServer, "https://blossom.primal.net", "https://nostr.download"]} />
     </>
   );
 }

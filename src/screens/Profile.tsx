@@ -151,6 +151,9 @@ function ProfileView({ pubkey, isMeTab }: { pubkey: string; isMeTab?: boolean })
                     <Icon name="zap" size={18} />
                   </button>
                 )}
+                <button type="button" className="btn btn-secondary btn-sm px-3" aria-label={`Add ${name} to a list`} title="Add to a list" onClick={() => requireSignIn() && openSheet(<AddToList pubkey={pubkey} />, { label: "Add to a list" })}>
+                  <Icon name="list" size={18} />
+                </button>
                 <FollowButton pubkey={pubkey} small />
               </>
             )}

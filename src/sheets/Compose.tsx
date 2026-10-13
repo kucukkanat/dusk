@@ -287,14 +287,14 @@ function Compose({ replyTo, quote, text: initial, draft }: { replyTo?: NostrEven
       )}
 
       {quoted && (
-        <div className="-mx-1 overflow-hidden rounded-[14px] border border-line">
+        <div className="-mx-1 max-h-56 overflow-hidden rounded-[14px] border border-line [mask-image:linear-gradient(to_bottom,black_75%,transparent)]">
           <NoteCard event={quoted} preview />
         </div>
       )}
 
       {cw != null && <input className="field min-h-11 py-2" placeholder="Content warning (optional reason)" value={cw} onChange={(e) => setCw(e.target.value)} />}
 
-      <div className="flex items-center gap-1 border-t border-line pt-2">
+      <div className="sticky -bottom-2 z-10 -mx-5 flex items-center gap-1 border-t border-line bg-raised px-5 pt-2 pb-2">
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => e.target.files && addFiles(e.target.files)} />
         <button type="button" className="iconbtn" aria-label="Add photos" disabled={files.length >= 8 || !!poll} onClick={() => fileRef.current?.click()}>
           <Icon name="image" />
