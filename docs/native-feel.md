@@ -116,6 +116,7 @@ What Dusk does so the installed PWA feels like an app rather than a web page. â˜
 - **Never leave a `view-transition-name` on an element.** If two visible elements share one, the transition is skipped. Set names just in time and clear them in `finished`.
 - **Unlayered CSS beats Tailwind utilities.** `.skeleton` sets no `border-radius`, so `rounded-full` and `rounded-md` still apply.
 - **Spring overshoot moves edges past their resting place.** Anything anchored to the screen edge, such as sheets, needs a bleed so the overshoot doesn't show the page behind it.
+- **iOS scrolls the whole document when a field gets focus**, even with `body { overflow: hidden }`, and fixed layers move with it. Together with the `visualViewport` pinning, that shifted content up a second time and left a keyboard-sized gap above the keyboard (seen on the private-key field when adding an identity). While `data-kb` is set, `lib/keyboard.ts` holds the window at scroll 0 and scrolls the field into view inside its own layer (`scrollIntoView({ block: "nearest" })`).
 - **iOS ignores `interactive-widget`**, which is why the `visualViewport` pinning exists. Android ignores none of it, and the 120px threshold works for both.
 - **The app badge needs notification permission on iOS.** Android and desktop show it without permission.
 - Shortcut and launch-screen images are generated; regenerate them rather than editing them by hand.
