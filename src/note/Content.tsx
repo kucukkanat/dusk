@@ -71,10 +71,11 @@ function blurUrl(hash?: string) {
 export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; meta: Map<string, FileMetadataFields>; hidden?: boolean; onReveal?: () => void }) {
   const dataSaver = useSettings((s) => s.dataSaver);
   const [loaded, setLoaded] = useState(!dataSaver);
+  const [revealed, setRevealed] = useState(false);
   const images = urls.filter((u) => mediaKind(u, meta.get(u)?.type) === "image");
   const others = urls.filter((u) => mediaKind(u, meta.get(u)?.type) !== "image");
   if (!urls.length) return null;
-  const blocked = hidden || !loaded;
+  const blocked = (hidden && !revealed) || !loaded;
   const firstMeta = meta.get(images[0] ?? urls[0]);
   const blur = blocked ? blurUrl(firstMeta?.blurhash) : undefined;
   const ratio = (() => {
@@ -90,6 +91,7 @@ export function MediaGrid({ urls, meta, hidden, onReveal }: { urls: string[]; me
         onClick={(e) => {
           e.stopPropagation();
           setLoaded(true);
+          setRevealed(true);
           onReveal?.();
         }}
       >
